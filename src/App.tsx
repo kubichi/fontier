@@ -14,7 +14,8 @@ import { parseFontFile, parseFontBuffer } from './utils/fontParser';
 import { autoTagFontMetadata } from './utils/autoTagger';
 import { detectWindowsSystemFonts } from './utils/systemFonts';
 import { rehydrateAllStoredFonts } from './utils/fontStorage';
-import { scanDroppedItems, scanDirectoryHandle } from './utils/fileScanner';
+import { scanDroppedItems, scanDirectoryHandle, scanDirectoryHandleWithPaths, ScannedFontFile } from './utils/fileScanner';
+
 import { Folder, Search, Plus, HardDrive, RefreshCw, X, Check } from 'lucide-react';
 
 const DEFAULT_FILTERS: FontFilters = {
@@ -399,6 +400,117 @@ export default function App() {
     }
   };
 
+  /**
+   * Core subfolder-aware import.
+   * Takes ScannedFontFile[] (each with a relative path like "helvetica/bold/Font.ttf"),
+   * groups them by their immediate subfolder relative to the root, creates one sidebar
+   * Folder entry per unique subfolder, and assigns fonts accordingly.
+   *
+   * rootLabel    = name of the top-level folder the user selected (shown for root-level fonts)
+   * scannedFiles = output of scanDirectoryHandleWithPaths / scanDroppedItems / Electron scan
+   */
+  const importFontsWithSubfolders = async (
+    scannedFiles: ScannedFontFile[],
+    rootLabel: string
+  ) => {
+    if (scannedFiles.length === 0) return;
+    setIsScanning(true);
+
+    try {
+      // --- Step 1: group files by the TOP-LEVEL subfolder relative to root ---
+      // "helvetica/bold/Font.ttf" -> key "helvetica"
+      // "Font.ttf"               -> key "" (root)
+      const subfolderMap = new Map<string, ScannedFontFile[]>();
+
+      for (const entry of scannedFiles) {
+        // Normalise slashes and strip leading slash if any
+        const relPath = entry.relativePath.replace(/\\/g, '/').replace(/^\//, '');
+        const parts = relPath.split('/');
+        // subfolder key = everything except the filename (joined), then take first segment
+        const subParts = parts.slice(0, -1); // e.g. ["helvetica","bold"] or []
+        const topLevelKey = subParts[0] || ''; // first segment = immediate child folder of root
+        if (!subfolderMap.has(topLevelKey)) subfolderMap.set(topLevelKey, []);
+        subfolderMap.get(topLevelKey)!.push(entry);
+      }
+
+      // --- Step 2: create one FolderItem per unique top-level subfolder ---
+      const newFolders: FolderItem[] = [];
+      const folderIdByKey = new Map<string, string>();
+      const FOLDER_COLORS = ['#888888', '#3b82f6', '#22c55e', '#ec4899', '#8b5cf6', '#ef4444', '#06b6d4', '#f97316', '#eab308'];
+      let colorIdx = 0;
+
+      for (const key of subfolderMap.keys()) {
+        const folderId = 'folder-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
+        const folderName = key || rootLabel; // empty key = root level → use root folder name
+        newFolders.push({
+          id: folderId,
+          name: folderName,
+          color: FOLDER_COLORS[colorIdx % FOLDER_COLORS.length],
+        });
+        folderIdByKey.set(key, folderId);
+        colorIdx++;
+      }
+
+      // --- Step 3: parse all fonts and assign correct folderId ---
+      const allParsedFonts: FontItem[] = [];
+      const BATCH_SIZE = 25;
+      let totalProcessed = 0;
+
+      for (const [key, entries] of subfolderMap.entries()) {
+        const targetFolderId = folderIdByKey.get(key)!;
+        for (let i = 0; i < entries.length; i += BATCH_SIZE) {
+          const batch = entries.slice(i, i + BATCH_SIZE);
+          for (const entry of batch) {
+            try {
+              const buf = await entry.file.arrayBuffer();
+              const item = await parseFontBuffer(entry.file.name, buf, targetFolderId, entry.file.size);
+              item.filePath = entry.relativePath;
+              allParsedFonts.push(item);
+            } catch (err) {
+              console.warn('Could not parse font ' + entry.file.name + ':', err);
+            }
+          }
+          totalProcessed += batch.length;
+          if (scannedFiles.length > 50) {
+            setNotification('Reading fonts: ' + Math.min(totalProcessed, scannedFiles.length) + ' / ' + scannedFiles.length + '...');
+            await new Promise((r) => setTimeout(r, 0));
+          }
+        }
+      }
+
+      if (allParsedFonts.length > 0) {
+        setFolders((prev) => [...prev, ...newFolders]);
+        setFonts((prev) => {
+          // Remove stale Local fonts with same names (re-import scenario)
+          const incomingNames = new Set(allParsedFonts.map((f) => f.name.toLowerCase()));
+          const filtered = prev.filter((f) => !(f.provider === 'Local' && incomingNames.has(f.name.toLowerCase())));
+          return [...allParsedFonts, ...filtered];
+        });
+        const firstFolderId = newFolders[0]?.id;
+        if (firstFolderId) setCurrentFilter('folder-' + firstFolderId);
+        setSelectedFontForInspector(allParsedFonts[0]);
+        setShowInspector(true);
+        const folderCount = newFolders.length;
+        setNotification(
+          'Imported ' + allParsedFonts.length + ' font' + (allParsedFonts.length === 1 ? '' : 's') +
+          ' into ' + folderCount + ' folder' + (folderCount === 1 ? '' : 's') +
+          ' from "' + rootLabel + '"'
+        );
+        setTimeout(() => setNotification(null), 5000);
+      } else {
+        setNotification('No font files (.ttf, .otf, .woff, .woff2) found in "' + rootLabel + '".');
+        setTimeout(() => setNotification(null), 4000);
+      }
+    } catch (err) {
+      console.error('Error in importFontsWithSubfolders:', err);
+      setNotification('Failed to read fonts from directory.');
+      setTimeout(() => setNotification(null), 4000);
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
+
   // Process a list of File objects into real FontItems using opentype.js
   const processAndImportFontFiles = async (
     files: File[],
@@ -502,43 +614,32 @@ export default function App() {
 
   // Trigger local directory picking (with subfolder recursion)
   const handleOpenLocalFolder = async () => {
-    // 1. Electron Native Folder Selection
+    // 1. Electron Native Folder Selection — uses main.cjs select-directory IPC
     if (typeof (window as any).electronAPI?.selectDirectory === 'function') {
       try {
         setIsScanning(true);
         setNotification('Scanning selected folder and all subfolders...');
         const res = await (window as any).electronAPI.selectDirectory();
         if (res && res.files && res.files.length > 0) {
-          const parsedFonts: FontItem[] = [];
-          const folderId = `folder-${Date.now()}`;
-          const folderLabel = res.folderName || 'Local Fonts';
+          const rootLabel = res.folderName || 'Local Fonts';
+          const rootPath = (res.folderPath || '').replace(/\\/g, '/').replace(/\/$/, '');
 
-          for (const f of res.files) {
-            try {
-              const item = await parseFontBuffer(f.name, f.buffer, folderId, f.size);
-              item.filePath = f.path;
-              parsedFonts.push(item);
-            } catch (err) {
-              console.warn(`Could not parse font ${f.name}:`, err);
-            }
-          }
-
-          if (parsedFonts.length > 0) {
-            const newFolder: FolderItem = {
-              id: folderId,
-              name: folderLabel,
-              count: parsedFonts.length,
-              color: '#888888',
+          // Convert Electron file list to ScannedFontFile[] using the full path info
+          const scanned: ScannedFontFile[] = res.files.map((f: any) => {
+            const absPath = (f.path || f.name).replace(/\\/g, '/');
+            // Compute path relative to the selected root folder
+            let relPath = absPath.startsWith(rootPath)
+              ? absPath.slice(rootPath.length).replace(/^\//, '')
+              : f.name;
+            return {
+              // Wrap buffer back into a File-like object; parseFontBuffer will arrayBuffer() it
+              file: new File([f.buffer], f.name, { type: 'font/truetype' }),
+              relativePath: relPath,
             };
-            setFolders((prev) => [...prev, newFolder]);
-            setFonts((prev) => [...parsedFonts, ...prev]);
-            setCurrentFilter(`folder-${folderId}`);
-            setSelectedFontForInspector(parsedFonts[0]);
-            setShowInspector(true);
-            setNotification(`Imported ${parsedFonts.length} font${parsedFonts.length === 1 ? '' : 's'} from "${folderLabel}"`);
-            setTimeout(() => setNotification(null), 5000);
-            return;
-          }
+          });
+
+          await importFontsWithSubfolders(scanned, rootLabel);
+          return;
         }
       } catch (err) {
         console.warn('Electron folder selection error:', err);
@@ -547,7 +648,7 @@ export default function App() {
       }
     }
 
-    // 2. Check if Native File System Directory Picker is available (Electron & modern Chromium)
+    // 2. Native File System Directory Picker (showDirectoryPicker) — also path-aware
     if (typeof (window as any).showDirectoryPicker === 'function') {
       try {
         const dirHandle = await (window as any).showDirectoryPicker({
@@ -555,29 +656,30 @@ export default function App() {
           mode: 'read',
         });
 
-        setNotification(`Scanning "${dirHandle.name}" and subfolders...`);
-        const files: File[] = [];
-        await scanDirectoryHandle(dirHandle, files);
+        setNotification('Scanning "' + dirHandle.name + '" and subfolders...');
+        const scanned = await scanDirectoryHandleWithPaths(dirHandle);
 
-        if (files.length > 0) {
-          await processAndImportFontFiles(files, dirHandle.name, dirHandle);
+        if (scanned.length > 0) {
+          await importFontsWithSubfolders(scanned, dirHandle.name);
           return;
         } else {
-          setNotification(`No .ttf or .otf fonts found in "${dirHandle.name}" or its subfolders.`);
+          setNotification('No .ttf or .otf fonts found in "' + dirHandle.name + '" or its subfolders.');
           setTimeout(() => setNotification(null), 4000);
           return;
         }
       } catch (err: any) {
         if (err.name === 'AbortError') {
-          return; // User cancelled file picker
+          return; // User cancelled
         }
         console.warn('showDirectoryPicker fallback to input:', err);
       }
     }
 
-    // 3. Fallback: Trigger standard HTML5 directory input (webkitdirectory recursively lists all subfolder files)
+    // 3. Fallback: HTML5 directory input (webkitdirectory)
     folderInputRef.current?.click();
   };
+
+
 
   // Handle files selected via directory input fallback (includes subfolders automatically)
   const handleFolderInputSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -713,21 +815,20 @@ export default function App() {
     if (!e.dataTransfer) return;
 
     try {
-      setIsScanning(true);
       setNotification('Reading dropped folders and font files...');
-      const { files, folderName } = await scanDroppedItems(e.dataTransfer);
-      if (files.length > 0) {
-        await processAndImportFontFiles(files, folderName);
+      const { files: scanned, folderName } = await scanDroppedItems(e.dataTransfer);
+      if (scanned.length > 0) {
+        await importFontsWithSubfolders(scanned, folderName);
       } else {
         setNotification('No font files (.ttf, .otf, .woff, .woff2) found in dropped items.');
         setTimeout(() => setNotification(null), 4000);
       }
     } catch (err) {
       console.warn('Error reading dropped files:', err);
-    } finally {
       setIsScanning(false);
     }
   };
+
 
   // Compute navigation counts in a single pass (optimized for 8,000+ fonts)
   const counts = useMemo(() => {

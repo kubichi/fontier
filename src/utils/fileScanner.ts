@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Universal Directory and File Scanner for Fontier
  * Handles deep recursive traversal for:
  * 1. Native File System Access API (showDirectoryPicker)
@@ -13,8 +13,15 @@ export function isFontFileName(fileName: string): boolean {
   return ext ? FONT_EXTENSIONS.has(ext) : false;
 }
 
+export interface ScannedFontFile {
+  file: File;
+  /** Relative path from the scanned root, e.g. "helvetica/bold/HelveticaBold.ttf" */
+  relativePath: string;
+}
+
 /**
- * Recursively scans FileSystemDirectoryHandle (File System Access API)
+ * Recursively scans FileSystemDirectoryHandle (File System Access API).
+ * Returns flat File[] for backward-compat callers.
  */
 export async function scanDirectoryHandle(
   dirHandle: any,
@@ -31,7 +38,7 @@ export async function scanDirectoryHandle(
             const file = await entry.getFile();
             files.push(file);
           } catch (e) {
-            console.warn(`Could not read file ${entry.name}:`, e);
+            console.warn('Could not read file ' + entry.name + ':', e);
           }
         }
       } else if (entry.kind === 'directory') {
@@ -46,17 +53,58 @@ export async function scanDirectoryHandle(
 }
 
 /**
- * Recursively scans a WebKit FileSystemEntry (drag-and-drop folders)
+ * Recursively scans a directory handle and tracks each file's relative path.
+ * Used to mirror the on-disk subfolder structure into the app Folders sidebar.
  */
-async function scanEntryRecursively(entry: any, files: File[]): Promise<void> {
+export async function scanDirectoryHandleWithPaths(
+  dirHandle: any,
+  relBase = '',
+  result: ScannedFontFile[] = [],
+  maxDepth = 30
+): Promise<ScannedFontFile[]> {
+  if (maxDepth <= 0) return result;
+
+  try {
+    for await (const entry of dirHandle.values()) {
+      const entryRelPath = relBase ? relBase + '/' + entry.name : entry.name;
+      if (entry.kind === 'file') {
+        if (isFontFileName(entry.name)) {
+          try {
+            const file = await entry.getFile();
+            result.push({ file, relativePath: entryRelPath });
+          } catch (e) {
+            console.warn('Could not read file ' + entry.name + ':', e);
+          }
+        }
+      } else if (entry.kind === 'directory') {
+        await scanDirectoryHandleWithPaths(entry, entryRelPath, result, maxDepth - 1);
+      }
+    }
+  } catch (err) {
+    console.warn('Error during directory traversal with paths:', err);
+  }
+
+  return result;
+}
+
+/**
+ * Recursively scans a WebKit FileSystemEntry (drag-and-drop) tracking relative paths.
+ */
+async function scanEntryRecursively(
+  entry: any,
+  result: ScannedFontFile[],
+  relBase = ''
+): Promise<void> {
   if (!entry) return;
+
+  const entryRelPath = relBase ? relBase + '/' + entry.name : entry.name;
 
   if (entry.isFile) {
     if (isFontFileName(entry.name)) {
       await new Promise<void>((resolve) => {
         entry.file(
           (file: File) => {
-            files.push(file);
+            result.push({ file, relativePath: entryRelPath });
             resolve();
           },
           (err: any) => {
@@ -87,7 +135,7 @@ async function scanEntryRecursively(entry: any, files: File[]): Promise<void> {
     try {
       const children = await readAllEntries();
       for (const child of children) {
-        await scanEntryRecursively(child, files);
+        await scanEntryRecursively(child, result, entryRelPath);
       }
     } catch (err) {
       console.warn('Error reading directory entries:', err);
@@ -96,10 +144,12 @@ async function scanEntryRecursively(entry: any, files: File[]): Promise<void> {
 }
 
 /**
- * Extracts all font files from DataTransfer (drag and drop supporting both raw files and nested folders)
+ * Extracts all font files from DataTransfer (drag-and-drop) with relative path tracking.
  */
-export async function scanDroppedItems(dataTransfer: DataTransfer): Promise<{ files: File[]; folderName: string }> {
-  const files: File[] = [];
+export async function scanDroppedItems(
+  dataTransfer: DataTransfer
+): Promise<{ files: ScannedFontFile[]; folderName: string }> {
+  const result: ScannedFontFile[] = [];
   let detectedFolderName = 'Imported Fonts';
 
   const items = dataTransfer.items;
@@ -112,11 +162,11 @@ export async function scanDroppedItems(dataTransfer: DataTransfer): Promise<{ fi
           if (entry.isDirectory && detectedFolderName === 'Imported Fonts') {
             detectedFolderName = entry.name;
           }
-          await scanEntryRecursively(entry, files);
+          await scanEntryRecursively(entry, result, '');
         } else {
           const file = item.getAsFile();
           if (file && isFontFileName(file.name)) {
-            files.push(file);
+            result.push({ file, relativePath: file.name });
           }
         }
       }
@@ -125,10 +175,10 @@ export async function scanDroppedItems(dataTransfer: DataTransfer): Promise<{ fi
     for (let i = 0; i < dataTransfer.files.length; i++) {
       const f = dataTransfer.files[i];
       if (isFontFileName(f.name)) {
-        files.push(f);
+        result.push({ file: f, relativePath: f.name });
       }
     }
   }
 
-  return { files, folderName: detectedFolderName };
+  return { files: result, folderName: detectedFolderName };
 }

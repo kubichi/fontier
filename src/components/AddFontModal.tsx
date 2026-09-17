@@ -88,8 +88,9 @@ export const AddFontModal: React.FC<AddFontModalProps> = ({
       setIsProcessing(true);
       setProcessProgress('Reading dropped folder structure...');
       try {
-        const { files, folderName } = await scanDroppedItems(e.dataTransfer);
-        setFilesState(files, folderName);
+        const { files: scanned, folderName } = await scanDroppedItems(e.dataTransfer);
+        setFilesState(scanned.map((s) => s.file), folderName);
+
       } catch (err) {
         console.warn('Error reading dropped files:', err);
       } finally {
