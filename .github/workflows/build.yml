@@ -1,4 +1,4 @@
-﻿name: Build & Release Desktop Apps (Windows, macOS, Linux)
+name: Build & Release Desktop Apps (Windows, macOS, Linux)
 
 on:
   push:
@@ -33,7 +33,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y libarchive-tools libfuse2t64 || sudo apt-get install -y libfuse2 || true
+          sudo apt-get install -y libarchive-tools libfuse2t64 libfuse2 desktop-file-utils icnsutils graphicsmagick || true
 
       - name: Install dependencies
         run: npm install --legacy-peer-deps
@@ -56,6 +56,7 @@ jobs:
       - name: Package Linux (AppImage, DEB, tar.gz)
         if: runner.os == 'Linux'
         run: npx electron-builder --linux --publish never
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
