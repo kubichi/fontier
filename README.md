@@ -9,10 +9,10 @@
 
 ## Features
 
-- **  Lightning-Fast Performance (8,000+ Fonts)**
+- **Lightning-Fast Performance (8,000+ Fonts)**
   - Virtual windowed rendering renders only visible fonts in the viewport.
   - On-demand lazy font decoding keeps memory usage low (~180MB RAM) even with massive font collections.
-- ** Hierarchical Subfolder Tree**
+- **Hierarchical Subfolder Tree**
   - Mirror exact directory structures on import (e.g. `fonts/editorial/serif/...`).
   - Expand and collapse folders with persistent state.
 - **Resizable Navigation Panel ("Scaler")**
