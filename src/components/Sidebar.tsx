@@ -24,15 +24,15 @@ import {
 import { FolderItem } from '../types';
 
 const FOLDER_COLORS = [
-  '#888888', // Gray (Default)
+  '#eab308', // Yellow (Default folder color)
+  '#f59e0b', // Amber
   '#3b82f6', // Blue
   '#22c55e', // Green
   '#ec4899', // Pink
   '#8b5cf6', // Purple
   '#ef4444', // Red
   '#06b6d4', // Cyan
-  '#f97316', // Orange
-  '#eab308', // Amber
+  '#888888', // Gray
 ];
 
 interface SidebarProps {
@@ -91,17 +91,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [providersOpen, setProvidersOpen] = useState(true);
   const [foldersOpen, setFoldersOpen] = useState(true);
   const [newFolderName, setNewFolderName] = useState('');
-  const [newFolderColor, setNewFolderColor] = useState('#888888');
+  const [newFolderColor, setNewFolderColor] = useState('#eab308');
   const [showFolderInput, setShowFolderInput] = useState(false);
   const [activeColorPickerFolderId, setActiveColorPickerFolderId] = useState<string | null>(null);
 
-  // Scaler / Resizer state (default 240px, min 180px, max 550px)
+  // Scaler / Resizer state (default 260px, min 180px, max 750px)
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     try {
       const saved = localStorage.getItem('fontier_sidebar_width');
-      return saved ? Math.max(180, Math.min(550, parseInt(saved, 10))) : 240;
+      return saved ? Math.max(180, Math.min(750, parseInt(saved, 10))) : 260;
     } catch {
-      return 240;
+      return 260;
     }
   });
   const [isResizing, setIsResizing] = useState(false);
@@ -126,25 +126,47 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const colorPickerRef = useRef<HTMLDivElement>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
 
-  // Drag resizer handler
+  // Collect all descendant IDs under a folder
+  const getDescendantFolderIds = (folderId: string): string[] => {
+    const result: string[] = [];
+    const collect = (pId: string) => {
+      folders.filter((f) => f.parentId === pId).forEach((c) => {
+        result.push(c.id);
+        collect(c.id);
+      });
+    };
+    collect(folderId);
+    return result;
+  };
+
+  // Drag resizer handler (allows dragging from 180px up to 800px smoothly)
   const handleMouseDownResize = (e: React.MouseEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     setIsResizing(true);
     const startX = e.clientX;
     const startWidth = sidebarWidth;
+    let currentWidth = startWidth;
+
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
 
     const onMouseMove = (moveEvent: MouseEvent) => {
+      moveEvent.preventDefault();
       const delta = moveEvent.clientX - startX;
-      const newWidth = Math.max(180, Math.min(550, startWidth + delta));
-      setSidebarWidth(newWidth);
+      currentWidth = Math.max(180, Math.min(800, startWidth + delta));
+      setSidebarWidth(currentWidth);
     };
 
-    const onMouseUp = () => {
+    const onMouseUp = (upEvent: MouseEvent) => {
+      upEvent.preventDefault();
       setIsResizing(false);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('mouseup', onMouseUp);
       try {
-        localStorage.setItem('fontier_sidebar_width', sidebarWidth.toString());
+        localStorage.setItem('fontier_sidebar_width', currentWidth.toString());
       } catch {}
     };
 
@@ -182,12 +204,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   return (
     <aside
       style={{ width: isNavOpen ? `${sidebarWidth + 44}px` : '44px' }}
-      className={`border-r flex select-none shrink-0 h-full overflow-hidden relative ${
+      className={`border-r flex select-none shrink-0 h-full relative z-20 ${
         isLight
           ? 'bg-[#ffffff] border-[#e2e8f0] text-[#334155]'
           : 'bg-[#181818] border-[#262626] text-[#c8c8c8]'
       }`}
     >
+
 
       {/* Mini leftmost icon rail */}
       <div
@@ -753,7 +776,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   const hasChildren = children.length > 0;
                   const isCollapsed = collapsedFolderIds.has(folder.id);
                   const count = counts.byFolder[folder.id] || 0;
-                  const folderColor = folder.color || '#888888';
+                  const folderColor = folder.color || '#eab308'; // Default yellow folder color
                   const isSystemFolder = ['pixel', 'serif', 'sans', 'display', 'mono', 'script'].includes(folder.id);
                   const isChecked = selectedFolderIds.has(folder.id);
 
@@ -770,14 +793,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             ? 'text-[#475569] hover:bg-[#f1f5f9] hover:text-[#0f172a]'
                             : 'text-[#aaaaaa] hover:bg-[#222222] hover:text-white'
                         }`}
-                        onClick={() => {
-                          if (isSelectionMode && !isSystemFolder) {
-                            setSelectedFolderIds((prev) => {
-                              const next = new Set(prev);
-                              if (next.has(folder.id)) next.delete(folder.id);
-                              else next.add(folder.id);
-                              return next;
-                            });
+                        onClick={(e) => {
+                          if (e.shiftKey || e.ctrlKey || e.metaKey || isSelectionMode) {
+                            if (!isSelectionMode) setIsSelectionMode(true);
+                            if (!isSystemFolder) {
+                              const targetIds = [folder.id, ...getDescendantFolderIds(folder.id)];
+                              setSelectedFolderIds((prev) => {
+                                const next = new Set(prev);
+                                const allChecked = targetIds.every((id) => next.has(id));
+                                if (allChecked) {
+                                  targetIds.forEach((id) => next.delete(id));
+                                } else {
+                                  targetIds.forEach((id) => next.add(id));
+                                }
+                                return next;
+                              });
+                            }
                           } else {
                             onSelectFilter(`folder-${folder.id}`);
                           }
@@ -795,22 +826,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
+                                const targetIds = [folder.id, ...getDescendantFolderIds(folder.id)];
                                 setSelectedFolderIds((prev) => {
                                   const next = new Set(prev);
-                                  if (next.has(folder.id)) next.delete(folder.id);
-                                  else next.add(folder.id);
+                                  const allChecked = targetIds.every((id) => next.has(id));
+                                  if (allChecked) {
+                                    targetIds.forEach((id) => next.delete(id));
+                                  } else {
+                                    targetIds.forEach((id) => next.add(id));
+                                  }
                                   return next;
                                 });
                               }}
                               className="shrink-0 text-[#3b82f6] p-0.5 hover:opacity-80"
+                              title={hasChildren ? 'Toggle this folder and all subfolders' : 'Toggle selection'}
                             >
                               {isChecked ? (
-                                <CheckSquare className="w-3.5 h-3.5" />
+                                <CheckSquare className="w-3.5 h-3.5 text-blue-500" />
                               ) : (
                                 <Square className="w-3.5 h-3.5 text-neutral-500" />
                               )}
                             </button>
                           )}
+
 
                           {/* Expand/Collapse Chevron for parents */}
                           {hasChildren ? (
@@ -999,128 +1037,208 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </div>
 
-      {/* Resizer Splitter Drag Handle ("Scaler") */}
+      {/* Resizer Splitter Drag Handle ("Scaler") positioned along the boundary between Sidebar and Main Content */}
       {isNavOpen && (
         <div
           onMouseDown={handleMouseDownResize}
-          className={`w-1.5 hover:w-2 shrink-0 cursor-col-resize transition-all group z-30 select-none flex items-center justify-center ${
-            isResizing
-              ? 'bg-[#3b82f6]'
-              : isLight
-              ? 'bg-transparent hover:bg-[#cbd5e1]'
-              : 'bg-transparent hover:bg-[#333333]'
-          }`}
-          title="Drag to scale folder sidebar width"
+          onDoubleClick={() => {
+            setSidebarWidth(260);
+            try {
+              localStorage.setItem('fontier_sidebar_width', '260');
+            } catch {}
+          }}
+          className="absolute top-0 bottom-0 -right-2 w-4 cursor-col-resize z-40 select-none flex items-center justify-center group"
+          title="Click and drag to scale sidebar width (Double-click to reset)"
         >
-          <div className="w-[1px] h-8 rounded-full bg-neutral-500/40 group-hover:bg-blue-400 group-hover:h-14 transition-all" />
+          {/* Subtle vertical border line indicator */}
+          <div
+            className={`w-[2px] h-full transition-colors duration-150 pointer-events-none ${
+              isResizing
+                ? 'bg-[#3b82f6] shadow-[0_0_8px_rgba(59,130,246,0.8)]'
+                : 'bg-transparent group-hover:bg-[#3b82f6]/70'
+            }`}
+          />
+          {/* Visible Center Grab Handle / Scaler Pill */}
+          <div
+            className={`absolute w-1.5 h-14 rounded-full transition-all duration-150 shadow-md flex flex-col items-center justify-center space-y-1 pointer-events-none ${
+              isResizing
+                ? 'bg-[#3b82f6] h-20 w-2 scale-110 shadow-lg ring-2 ring-blue-400/40'
+                : isLight
+                ? 'bg-[#cbd5e1] group-hover:bg-[#3b82f6] group-hover:h-20 group-hover:w-2'
+                : 'bg-[#444444] group-hover:bg-[#3b82f6] group-hover:h-20 group-hover:w-2'
+            }`}
+          >
+            <span className="w-0.5 h-0.5 rounded-full bg-white/70" />
+            <span className="w-0.5 h-0.5 rounded-full bg-white/70" />
+            <span className="w-0.5 h-0.5 rounded-full bg-white/70" />
+          </div>
         </div>
+      )}
+
+      {/* Fullscreen drag overlay while resizing so cursor never loses tracking */}
+      {isResizing && (
+        <div className="fixed inset-0 z-[9999] cursor-col-resize select-none" />
       )}
 
       {/* Right-click Floating Context Menu for Folders */}
-      {contextMenu && (
-        <div
-          ref={contextMenuRef}
-          style={{
-            position: 'fixed',
-            left: `${contextMenu.x}px`,
-            top: `${contextMenu.y}px`,
-          }}
-          className={`z-50 w-48 rounded-md shadow-2xl py-1 border text-xs animate-in fade-in zoom-in-95 ${
-            isLight
-              ? 'bg-white border-[#cbd5e1] text-[#0f172a]'
-              : 'bg-[#1e1e1e] border-[#383838] text-[#e0e0e0]'
-          }`}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="px-3 py-1 font-semibold border-b truncate text-[11px] opacity-70">
-            {contextMenu.folder.name}
-          </div>
+      {contextMenu && (() => {
+        const isSystemFolder = ['pixel', 'serif', 'sans', 'display', 'mono', 'script'].includes(
+          contextMenu.folder.id
+        );
+        const subfolderIds = getDescendantFolderIds(contextMenu.folder.id);
+        const hasSubfolders = subfolderIds.length > 0;
 
-          {onRescanFolder && (
-            <button
-              onClick={() => {
-                onRescanFolder(contextMenu.folder.id);
-                setContextMenu(null);
-              }}
-              className={`w-full flex items-center px-3 py-1.5 space-x-2 text-left hover:bg-blue-600 hover:text-white transition-colors`}
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span>Rescan Folder</span>
-            </button>
-          )}
-
-          {onMoveFolderUp && (
-            <button
-              onClick={() => {
-                onMoveFolderUp(contextMenu.folder.id);
-                setContextMenu(null);
-              }}
-              className={`w-full flex items-center px-3 py-1.5 space-x-2 text-left hover:bg-blue-600 hover:text-white transition-colors`}
-            >
-              <ArrowUp className="w-3.5 h-3.5" />
-              <span>Move Up</span>
-            </button>
-          )}
-
-          {onMoveFolderDown && (
-            <button
-              onClick={() => {
-                onMoveFolderDown(contextMenu.folder.id);
-                setContextMenu(null);
-              }}
-              className={`w-full flex items-center px-3 py-1.5 space-x-2 text-left hover:bg-blue-600 hover:text-white transition-colors`}
-            >
-              <ArrowDown className="w-3.5 h-3.5" />
-              <span>Move Down</span>
-            </button>
-          )}
-
-          <button
-            onClick={() => {
-              setActiveColorPickerFolderId(contextMenu.folder.id);
-              setContextMenu(null);
+        return (
+          <div
+            ref={contextMenuRef}
+            style={{
+              position: 'fixed',
+              left: `${contextMenu.x}px`,
+              top: `${contextMenu.y}px`,
             }}
-            className={`w-full flex items-center px-3 py-1.5 space-x-2 text-left hover:bg-blue-600 hover:text-white transition-colors`}
+            className={`z-50 w-52 rounded-md shadow-2xl py-1 border text-xs animate-in fade-in zoom-in-95 ${
+              isLight
+                ? 'bg-white border-[#cbd5e1] text-[#0f172a]'
+                : 'bg-[#1e1e1e] border-[#383838] text-[#e0e0e0]'
+            }`}
+            onClick={(e) => e.stopPropagation()}
           >
-            <Palette className="w-3.5 h-3.5" />
-            <span>Change Color</span>
-          </button>
+            <div className="px-3 py-1 font-semibold border-b truncate text-[11px] opacity-70">
+              {contextMenu.folder.name}
+            </div>
 
-          {!['pixel', 'serif', 'sans', 'display', 'mono', 'script'].includes(
-            contextMenu.folder.id
-          ) && (
-            <>
+            {/* Quick multi-select action */}
+            {!isSystemFolder && (
+              <>
+                {hasSubfolders ? (
+                  <button
+                    onClick={() => {
+                      setIsSelectionMode(true);
+                      const allIds = [contextMenu.folder.id, ...subfolderIds];
+                      setSelectedFolderIds((prev) => new Set([...Array.from(prev), ...allIds]));
+                      setContextMenu(null);
+                    }}
+                    className="w-full flex items-center px-3 py-1.5 space-x-2 text-left hover:bg-blue-600 hover:text-white transition-colors"
+                  >
+                    <CheckSquare className="w-3.5 h-3.5 text-blue-400" />
+                    <span>Select Folder & All Subfolders</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => {
+                      setIsSelectionMode(true);
+                      setSelectedFolderIds((prev) => new Set([...Array.from(prev), contextMenu.folder.id]));
+                      setContextMenu(null);
+                    }}
+                    className="w-full flex items-center px-3 py-1.5 space-x-2 text-left hover:bg-blue-600 hover:text-white transition-colors"
+                  >
+                    <CheckSquare className="w-3.5 h-3.5 text-blue-400" />
+                    <span>Select Folder</span>
+                  </button>
+                )}
+              </>
+            )}
+
+            {onRescanFolder && (
               <button
                 onClick={() => {
-                  onDeleteFolder(contextMenu.folder.id);
+                  onRescanFolder(contextMenu.folder.id);
                   setContextMenu(null);
                 }}
-                className="w-full flex items-center px-3 py-1.5 space-x-2 text-left hover:bg-neutral-700 hover:text-white transition-colors border-t border-neutral-700/50 mt-1"
-                title="Hides this folder from Fontier. Leaves all font files on your computer untouched."
+                className="w-full flex items-center px-3 py-1.5 space-x-2 text-left hover:bg-blue-600 hover:text-white transition-colors"
               >
-                <Trash2 className="w-3.5 h-3.5 text-neutral-400" />
-                <span>Remove from Fontier</span>
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Rescan Folder</span>
               </button>
+            )}
 
+            {onMoveFolderUp && (
               <button
                 onClick={() => {
-                  const targetFolder = contextMenu.folder;
+                  onMoveFolderUp(contextMenu.folder.id);
                   setContextMenu(null);
-                  setConfirmDeviceDelete({
-                    folderIds: [targetFolder.id],
-                    folderNames: [targetFolder.name],
-                  });
                 }}
-                className="w-full flex items-center px-3 py-1.5 space-x-2 text-left text-[#ef4444] hover:bg-[#ef4444] hover:text-white transition-colors"
-                title="Permanently moves this folder and its files to the Recycle Bin"
+                className="w-full flex items-center px-3 py-1.5 space-x-2 text-left hover:bg-blue-600 hover:text-white transition-colors"
               >
-                <AlertTriangle className="w-3.5 h-3.5" />
-                <span>Delete from Device...</span>
+                <ArrowUp className="w-3.5 h-3.5" />
+                <span>Move Up</span>
               </button>
-            </>
-          )}
-        </div>
-      )}
+            )}
+
+            {onMoveFolderDown && (
+              <button
+                onClick={() => {
+                  onMoveFolderDown(contextMenu.folder.id);
+                  setContextMenu(null);
+                }}
+                className="w-full flex items-center px-3 py-1.5 space-x-2 text-left hover:bg-blue-600 hover:text-white transition-colors"
+              >
+                <ArrowDown className="w-3.5 h-3.5" />
+                <span>Move Down</span>
+              </button>
+            )}
+
+            <button
+              onClick={() => {
+                setActiveColorPickerFolderId(contextMenu.folder.id);
+                setContextMenu(null);
+              }}
+              className="w-full flex items-center px-3 py-1.5 space-x-2 text-left hover:bg-blue-600 hover:text-white transition-colors"
+            >
+              <Palette className="w-3.5 h-3.5" />
+              <span>Change Color</span>
+            </button>
+
+            {!isSystemFolder && (
+              <>
+                <button
+                  onClick={() => {
+                    const targetFolder = contextMenu.folder;
+                    const allIds = [targetFolder.id, ...subfolderIds];
+                    if (onBulkDeleteFolders) {
+                      onBulkDeleteFolders(allIds, false);
+                    } else {
+                      allIds.forEach((id) => onDeleteFolder(id));
+                    }
+                    setContextMenu(null);
+                  }}
+                  className="w-full flex items-center px-3 py-1.5 space-x-2 text-left hover:bg-neutral-700 hover:text-white transition-colors border-t border-neutral-700/50 mt-1"
+                  title="Hides this folder from Fontier. Leaves all font files on your computer untouched."
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-neutral-400" />
+                  <span>
+                    {hasSubfolders
+                      ? `Remove Folder & Subfolders (${subfolderIds.length})`
+                      : 'Remove from Fontier'}
+                  </span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    const targetFolder = contextMenu.folder;
+                    const allIds = [targetFolder.id, ...subfolderIds];
+                    const allNames = folders.filter((f) => allIds.includes(f.id)).map((f) => f.name);
+                    setContextMenu(null);
+                    setConfirmDeviceDelete({
+                      folderIds: allIds,
+                      folderNames: allNames,
+                    });
+                  }}
+                  className="w-full flex items-center px-3 py-1.5 space-x-2 text-left text-[#ef4444] hover:bg-[#ef4444] hover:text-white transition-colors"
+                  title="Permanently moves this folder and its files to the Recycle Bin"
+                >
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  <span>
+                    {hasSubfolders
+                      ? 'Delete from Device (Recycle Bin)...'
+                      : 'Delete from Device...'}
+                  </span>
+                </button>
+              </>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Confirmation Modal for Delete from Device (Recycle Bin) */}
       {confirmDeviceDelete && (

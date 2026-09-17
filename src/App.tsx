@@ -362,7 +362,7 @@ export default function App() {
   // Create new folder
   const handleCreateFolder = (name: string, color?: string, parentId?: string): string => {
     const id = `folder-${Date.now()}`;
-    const newFolder: FolderItem = { id, name, color: color || '#38bdf8', parentId, collapsed: false };
+    const newFolder: FolderItem = { id, name, color: color || '#eab308', parentId, collapsed: false };
     setFolders((prev) => [...prev, newFolder]);
     return id;
   };
@@ -487,7 +487,7 @@ export default function App() {
       const rootFolder: FolderItem = {
         id: rootFolderId,
         name: rootLabel,
-        color: '#38bdf8',
+        color: '#eab308', // Default yellow folder color
         collapsed: false,
         folderPath: rootFolderPath,
       };
@@ -495,9 +495,6 @@ export default function App() {
       const newFolders: FolderItem[] = [rootFolder];
       const folderIdByPath = new Map<string, string>();
       folderIdByPath.set('', rootFolderId);
-
-      const FOLDER_COLORS = ['#888888', '#3b82f6', '#22c55e', '#ec4899', '#8b5cf6', '#ef4444', '#06b6d4', '#f97316', '#eab308'];
-      let colorIdx = 0;
 
       // Sort keys by depth so parent folders are created before child folders
       const sortedKeys = Array.from(subfolderMap.keys())
@@ -517,16 +514,16 @@ export default function App() {
               id: subId,
               name: parts[i],
               parentId: currentParentId, // NESTED UNDER ITS PARENT!
-              color: FOLDER_COLORS[colorIdx % FOLDER_COLORS.length],
+              color: '#eab308', // Yellow as default for all subfolders!
               folderPath: rootFolderPath ? `${rootFolderPath}/${currentPath}` : undefined,
               collapsed: false,
             });
-            colorIdx++;
             folderIdByPath.set(currentPath, subId);
           }
           currentParentId = folderIdByPath.get(currentPath)!;
         }
       }
+
 
       // 3. Parse all fonts and assign folderId
       const allParsedFonts: FontItem[] = [];
@@ -617,7 +614,7 @@ export default function App() {
           const newFolder: FolderItem = {
             id: targetFolderId,
             name: folderLabel,
-            color: '#38bdf8',
+            color: '#eab308',
           };
           setFolders((prev) => [...prev, newFolder]);
         } else {
