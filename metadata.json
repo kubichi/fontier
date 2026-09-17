@@ -1,0 +1,6 @@
+{
+  "name": "Fontier",
+  "description": "A font viewer and manager to preview texts, organize fonts by folders, inspect glyphs and alphabets, customize colors, and favorite typography.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
