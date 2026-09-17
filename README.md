@@ -14,8 +14,6 @@
 [![GitHub Release](https://img.shields.io/github/v/release/kubichi/fontier?style=flat-square&color=22c55e)](https://github.com/kubichi/fontier/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
-👉 **[Click Here to Download Latest Release (.exe / .AppImage / .dmg)](https://github.com/kubichi/fontier/releases/latest)**
-
 </div>
 
 ---
