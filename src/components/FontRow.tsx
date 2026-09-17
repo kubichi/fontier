@@ -55,7 +55,7 @@ export const FontRow: React.FC<FontRowProps> = React.memo(({
   if (viewMode === 'grid') {
     return (
       <div
-        className={`rounded-md border transition-all overflow-hidden flex flex-col group font-card-optimized ${
+        className={`rounded-md border transition-all overflow-hidden flex flex-col group ${
           isLight
             ? isSelected
               ? 'bg-white border-[#16a34a] ring-2 ring-[#16a34a]/30 shadow-md'
@@ -230,7 +230,7 @@ export const FontRow: React.FC<FontRowProps> = React.memo(({
   return (
     <div
       onClick={() => onSelectFont?.(font)}
-      className={`border-b transition-colors group cursor-pointer font-card-optimized ${
+      className={`border-b transition-colors group cursor-pointer ${
         isLight
           ? isSelected
             ? 'bg-[#f0fdf4] border-[#86efac] ring-1 ring-inset ring-[#16a34a]/30'

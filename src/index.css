@@ -71,12 +71,7 @@
   -webkit-app-region: no-drag;
 }
 
-/* High performance virtual rendering for 8,000+ fonts */
-.font-card-optimized {
-  content-visibility: auto;
-  contain-intrinsic-size: 80px;
-  contain: layout style paint;
-}
+
 
 /* Animated accent loading progress bar */
 @keyframes loadingShimmer {

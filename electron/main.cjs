@@ -6,6 +6,7 @@ app.name = 'Fontier';
 nativeTheme.themeSource = 'dark';
 if (process.platform === 'win32') {
   app.setAppUserModelId('com.fontier.app');
+  app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
 }
 
 function createWindow() {
