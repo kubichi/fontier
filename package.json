@@ -1,8 +1,9 @@
 {
   "name": "fontier",
+  "productName": "Fontier",
   "private": true,
   "version": "1.0.0",
-  "description": "Fontier - Modern Typography and Font Manager",
+  "description": "Fontier",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
@@ -10,7 +11,12 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "electron:dev": "concurrently \"vite --port=3000\" \"wait-on http://localhost:3000 && electron .\"",
+    "electron:build": "vite build && electron-builder --win nsis",
+    "electron:build:all": "vite build && electron-builder -mwl",
+    "electron:build:linux": "vite build && electron-builder --linux",
+    "electron:build:mac": "vite build && electron-builder --mac"
   },
   "build": {
     "appId": "com.fontier.app",
@@ -21,17 +27,48 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "yildizkubilay144",
+        "owner": "kubichi",
         "repo": "fontier"
       }
     ],
+    "files": [
+      "dist/**/*",
+      "electron/**/*"
+    ],
     "win": {
-      "target": ["nsis", "portable"],
-      "icon": "public/icon.png"
+      "target": [
+        "nsis"
+      ],
+      "icon": "public/icon.ico",
+      "executableName": "Fontier"
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.graphics-design",
+      "icon": "public/icon.png"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb",
+        "tar.gz"
+      ],
+      "category": "Graphics",
+      "icon": "public/icon.png",
+      "desktop": {
+        "StartupWMClass": "fontier",
+        "Comment": "Font Viewer and Typography Manager",
+        "Categories": "Graphics;Utility;"
+      }
     }
   },
   "dependencies": {
@@ -40,6 +77,7 @@
     "@types/opentype.js": "^1.3.10",
     "@vitejs/plugin-react": "^6.1.1",
     "dotenv": "^17.2.3",
+    "electron-updater": "^6.8.9",
     "express": "^4.21.2",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
@@ -54,10 +92,14 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "autoprefixer": "^10.4.21",
-    "esbuild": "^0.25.0",
+    "concurrently": "^9.1.2",
+    "cross-env": "^7.0.3",
+    "electron": "^35.0.0",
+    "electron-builder": "^25.1.8",
     "sharp": "^0.35.4",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.21.0",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "wait-on": "^8.0.2"
   }
 }

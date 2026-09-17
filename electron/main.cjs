@@ -1,13 +1,16 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, session, nativeTheme } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
 app.name = 'Fontier';
+nativeTheme.themeSource = 'dark';
 if (process.platform === 'win32') {
   app.setAppUserModelId('com.fontier.app');
 }
 
 function createWindow() {
+  const isWin = process.platform === 'win32';
+  const iconFile = isWin ? 'icon.ico' : 'icon.png';
   const mainWindow = new BrowserWindow({
     title: 'Fontier',
     width: 1280,
@@ -17,12 +20,13 @@ function createWindow() {
     frame: false, // Disables native Windows title bar so only Fontier's custom title bar is shown!
     titleBarStyle: 'hidden',
     backgroundColor: '#161616',
-    icon: path.join(__dirname, '../public/icon.png'),
+    icon: path.join(__dirname, '../public', iconFile),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       nodeIntegration: false,
       contextIsolation: true,
       webSecurity: true,
+      scrollBounce: false,
     },
   });
 
@@ -191,14 +195,30 @@ function createWindow() {
 
   // Load app (production build or local dev server)
   const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
-  if (isDev && process.env.ELECTRON_DEV_URL) {
-    mainWindow.loadURL(process.env.ELECTRON_DEV_URL);
+  if (isDev) {
+    mainWindow.loadURL(process.env.ELECTRON_DEV_URL || 'http://localhost:3000');
   } else {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
 }
 
 app.whenReady().then(() => {
+  // Auto-grant permission for local system fonts access (window.queryLocalFonts)
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+    if (permission === 'local-fonts') {
+      callback(true);
+      return;
+    }
+    callback(false);
+  });
+
+  session.defaultSession.setPermissionCheckHandler((webContents, permission) => {
+    if (permission === 'local-fonts') {
+      return true;
+    }
+    return false;
+  });
+
   createWindow();
 
   app.on('activate', () => {
