@@ -1,6 +1,8 @@
 // Robust IndexedDB binary font storage and FontFace registry manager for Fontier
 const DB_NAME = 'fontier_font_db';
-const DB_VERSION = 1;
+// Version 2: clears old entries that used ephemeral random UserFont_local_XXXX family names.
+// On upgrade, the store is dropped and recreated so stale binaries don't cause ghost registrations.
+const DB_VERSION = 2;
 const STORE_NAME = 'font_binaries';
 
 let dbPromise: Promise<IDBDatabase> | null = null;
@@ -14,8 +16,12 @@ function getDB(): Promise<IDBDatabase> {
         return;
       }
       const request = window.indexedDB.open(DB_NAME, DB_VERSION);
-      request.onupgradeneeded = () => {
+      request.onupgradeneeded = (event) => {
         const db = request.result;
+        // Drop old store on version upgrade to clear stale random-family-name entries
+        if (event.oldVersion < 2 && db.objectStoreNames.contains(STORE_NAME)) {
+          db.deleteObjectStore(STORE_NAME);
+        }
         if (!db.objectStoreNames.contains(STORE_NAME)) {
           db.createObjectStore(STORE_NAME, { keyPath: 'id' });
         }
@@ -47,78 +53,67 @@ export async function saveFontBinary(id: string, familyName: string, buffer: Arr
 }
 
 /**
- * Injects a CSS @font-face style rule as a guaranteed backup alongside FontFace API.
+ * Registers a FontFace into document.fonts using a blob URL as the font source.
+ * Blob URLs are more reliable than raw ArrayBuffer in Electron's Chromium renderer.
+ * The @font-face CSS rule is injected first so the CSS engine resolves the family
+ * immediately on first paint; the FontFace API is also registered so
+ * document.fonts.check() returns the correct result.
  */
-function injectFontFaceStyleRule(familyName: string, blobUrl: string): void {
-  if (typeof document === 'undefined') return;
-  const styleId = `fontier-font-${familyName.replace(/[^a-zA-Z0-9]/g, '_')}`;
-  let styleEl = document.getElementById(styleId) as HTMLStyleElement | null;
-  if (!styleEl) {
-    styleEl = document.createElement('style');
-    styleEl.id = styleId;
-    document.head.appendChild(styleEl);
-  }
-  styleEl.textContent = `
-    @font-face {
-      font-family: "${familyName}";
-      src: url("${blobUrl}") format("truetype"), url("${blobUrl}") format("opentype"), url("${blobUrl}") format("woff2");
-      font-weight: 100 900;
-      font-style: normal italic;
-      font-display: swap;
-    }
-  `;
-}
-
-/**
- * Registers a FontFace object into document.fonts immediately with clean binary buffer and blob fallback.
- */
-export async function registerFontFace(safeFamilyName: string, buffer: ArrayBuffer): Promise<boolean> {
+export async function registerFontFace(familyName: string, buffer: ArrayBuffer): Promise<boolean> {
   if (typeof document === 'undefined') return false;
-  
-  // Clean string identifier without quotes
-  const cleanFamily = safeFamilyName.replace(/["']/g, '').trim();
+
+  const cleanFamily = familyName.replace(/['"]/g, '').trim();
+  if (!cleanFamily) return false;
+
+  // Already registered this session — document.fonts persists the face
   if (registeredFamilies.has(cleanFamily)) {
     return true;
   }
 
   try {
     const cleanBuffer = buffer.slice(0);
+    // Blob URL is the most reliable font source in Electron's Chromium renderer
     const blob = new Blob([cleanBuffer], { type: 'font/truetype' });
     const blobUrl = URL.createObjectURL(blob);
 
-    // 1. Try FontFace constructor from ArrayBuffer
-    try {
-      const fontFace = new FontFace(cleanFamily, cleanBuffer);
-      const loadedFace = await fontFace.load();
-      if ('fonts' in document) {
-        document.fonts.add(loadedFace);
-      }
-    } catch {
-      // 2. Try FontFace constructor from Blob URL
-      try {
-        const fontFaceUrl = new FontFace(cleanFamily, `url(${blobUrl})`);
-        const loadedFaceUrl = await fontFaceUrl.load();
-        if ('fonts' in document) {
-          document.fonts.add(loadedFaceUrl);
-        }
-      } catch {
-        // Fallback to style tag injection
-      }
+    // 1. Inject @font-face style rule FIRST — CSS engine picks it up immediately
+    const styleId = 'fontier-font-' + cleanFamily.replace(/[^a-zA-Z0-9]/g, '_');
+    if (!document.getElementById(styleId)) {
+      const styleEl = document.createElement('style');
+      styleEl.id = styleId;
+      styleEl.textContent = [
+        '@font-face {',
+        '  font-family: "' + cleanFamily + '";',
+        '  src: url("' + blobUrl + '");',
+        '  font-weight: 100 900;',
+        '  font-style: normal italic;',
+        '  font-display: block;',
+        '}',
+      ].join('\n');
+      document.head.appendChild(styleEl);
     }
 
-    // 3. Inject @font-face rule to guarantee CSS engine resolution across all render trees
-    injectFontFaceStyleRule(cleanFamily, blobUrl);
+    // 2. Also register via FontFace API so document.fonts.check() works
+    try {
+      const face = new FontFace(cleanFamily, 'url("' + blobUrl + '")');
+      await face.load();
+      document.fonts.add(face);
+    } catch (faceErr) {
+      // @font-face style injection still provides the fallback — non-fatal
+      console.warn('FontFace API load failed for "' + cleanFamily + '" (CSS @font-face still active):', faceErr);
+    }
 
     registeredFamilies.add(cleanFamily);
     return true;
   } catch (err) {
-    console.warn(`Failed to register FontFace for ${cleanFamily}:`, err);
+    console.warn('Failed to register font "' + familyName + '":', err);
     return false;
   }
 }
 
 /**
  * Re-registers all stored local fonts from IndexedDB on application start.
+ * Returns the count of successfully rehydrated fonts.
  */
 export async function rehydrateAllStoredFonts(): Promise<number> {
   try {
@@ -150,4 +145,11 @@ export async function rehydrateAllStoredFonts(): Promise<number> {
     console.warn('Rehydration from IndexedDB skipped or failed:', err);
     return 0;
   }
+}
+
+/**
+ * Returns the set of family names registered in this session.
+ */
+export function getRegisteredFamilies(): ReadonlySet<string> {
+  return registeredFamilies;
 }

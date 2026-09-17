@@ -39,18 +39,28 @@ export default function App() {
       const saved = localStorage.getItem('fontbase_fonts');
       if (saved) {
         const parsed: FontItem[] = JSON.parse(saved);
-        return parsed.map((f) => {
-          if (!f.tags || f.tags.length === 0) {
-            const auto = autoTagFontMetadata({
-              fontName: f.name,
-              postScriptName: f.postScriptName,
-              fileName: f.fileName,
-              subfamily: f.styles?.[0]?.name,
-            });
-            return { ...f, tags: auto.tags };
-          }
-          return f;
-        });
+        return parsed
+          // Migration: filter out Local fonts that used the old ephemeral random family name
+          // scheme (UserFont_local_XXXX). These can't render correctly since their IndexedDB
+          // binaries are cleared by the v2 schema migration. Users must re-import their folders.
+          .filter((f) => {
+            if (f.provider === 'Local' && f.fontFamily && f.fontFamily.includes('UserFont_local_')) {
+              return false;
+            }
+            return true;
+          })
+          .map((f) => {
+            if (!f.tags || f.tags.length === 0) {
+              const auto = autoTagFontMetadata({
+                fontName: f.name,
+                postScriptName: f.postScriptName,
+                fileName: f.fileName,
+                subfamily: f.styles?.[0]?.name,
+              });
+              return { ...f, tags: auto.tags };
+            }
+            return f;
+          });
       }
     } catch (e) {
       console.error(e);
@@ -65,6 +75,7 @@ export default function App() {
       return { ...f, tags: auto.tags };
     });
   });
+
 
   // Load folders from localStorage or fallback to default
   const [folders, setFolders] = useState<FolderItem[]>(() => {
@@ -180,12 +191,26 @@ export default function App() {
     };
   }, []);
 
-  // Rehydrate stored font binaries into document.fonts and inject styles on startup
+  // fontRenderKey is bumped after IndexedDB rehydration completes so React re-renders
+  // font previews that were initially painted before font faces were registered.
+  const [fontRenderKey, setFontRenderKey] = useState<number>(0);
+
+  // Rehydrate stored font binaries into document.fonts and inject styles on startup.
+  // After rehydration, bump fontRenderKey to trigger a re-render of all font rows —
+  // this fixes the bug where fonts rendered before their faces were loaded showed as sans-serif.
   useEffect(() => {
-    rehydrateAllStoredFonts().catch((err) => {
-      console.warn('Could not rehydrate stored font binaries:', err);
-    });
+    rehydrateAllStoredFonts()
+      .then((count) => {
+        if (count > 0) {
+          // Force a re-render so font rows pick up the newly registered faces
+          setFontRenderKey((k) => k + 1);
+        }
+      })
+      .catch((err) => {
+        console.warn('Could not rehydrate stored font binaries:', err);
+      });
   }, []);
+
 
   // Reset visible window count when navigation or filter changes
   useEffect(() => {
@@ -1134,7 +1159,7 @@ export default function App() {
                     <div className="p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
                       {filteredFonts.slice(0, visibleCount).map((font) => (
                         <FontRow
-                          key={font.id}
+                          key={`${font.id}-${fontRenderKey}`}
                           font={font}
                           previewText={deferredPreviewText}
                           fontSize={fontSize}
@@ -1155,6 +1180,7 @@ export default function App() {
                         />
                       ))}
                     </div>
+
                   ) : (
                     <div
                       className={`divide-y ${
@@ -1163,7 +1189,7 @@ export default function App() {
                     >
                       {filteredFonts.slice(0, visibleCount).map((font) => (
                         <FontRow
-                          key={font.id}
+                          key={`${font.id}-${fontRenderKey}`}
                           font={font}
                           previewText={deferredPreviewText}
                           fontSize={fontSize}

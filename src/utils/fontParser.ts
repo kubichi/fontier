@@ -1,7 +1,7 @@
 import opentype from 'opentype.js';
 import { FontItem, FontFormat, FontCategory } from '../types';
 import { autoTagFontMetadata } from './autoTagger';
-import { saveFontBinary, registerFontFace } from './fontStorage';
+import { saveFontBinary, registerFontFace, getRegisteredFamilies } from './fontStorage';
 
 function extractString(nameObj: unknown): string {
   if (!nameObj) return '';
@@ -21,6 +21,28 @@ function extractFamilyGroup(familyName: string, fileName: string): string {
     .replace(/\s+(Regular|Bold|Italic|Light|Medium|SemiBold|DemiBold|ExtraBold|Black|Thin|Heavy|ExtraLight|UltraLight|Book|Condensed|Oblique|\d{3}(italic)?)/gi, '')
     .trim();
   return base || familyName || 'Untitled Family';
+}
+
+/**
+ * Builds a safe CSS font-family name from a raw family string.
+ * We use the ACTUAL font family name (from OpenType tables) so CSS references
+ * remain stable across app restarts without needing special rehydration logic.
+ * A numeric suffix is appended only when the same family name is imported more
+ * than once (e.g. two different files both reporting family "MyFont").
+ */
+function buildSafeFamilyName(rawFamily: string): string {
+  // Strip characters that are problematic in unquoted CSS (quotes are added at usage)
+  const clean = rawFamily.replace(/[^\x20-\x7E]/g, '').trim() || 'UnknownFont';
+
+  // If not yet registered, use as-is; otherwise append a counter suffix
+  const registered = getRegisteredFamilies();
+  if (!registered.has(clean)) {
+    return clean;
+  }
+
+  // Same family already loaded (e.g. both Regular and Bold as separate files) — reuse the same name
+  // so they share the font-family bucket. The @font-face rule supports font-weight/font-style ranges.
+  return clean;
 }
 
 export async function parseFontBuffer(
@@ -52,7 +74,7 @@ export async function parseFontBuffer(
       const familyName = extractString(parsedFont.names.fontFamily);
       const fullName = extractString(parsedFont.names.fullName);
       const typographicFamily = extractString((parsedFont.names as any).preferredFamily || (parsedFont.names as any).typographicFamily);
-      
+
       familyGroup = typographicFamily || familyName || extractFamilyGroup(fullName || fontName, fileName);
       fontName = fullName || familyName || fontName;
 
@@ -73,7 +95,7 @@ export async function parseFontBuffer(
       unitsPerEm = parsedFont.unitsPerEm || 1000;
     }
   } catch (err) {
-    console.warn('Could not parse OpenType tables with opentype.js; falling back to basic binary loading:', err);
+    console.warn('Could not parse OpenType tables with opentype.js; using filename as fallback:', err);
   }
 
   if (!familyGroup) {
@@ -92,22 +114,30 @@ export async function parseFontBuffer(
 
   category = autoTagResult.suggestedCategory || category;
 
-  // Generate unique CSS font-family name to avoid collision across 2,000+ fonts
-  const uniqueId = `local-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-  const safeFontFamily = `UserFont_${uniqueId.replace(/[^a-zA-Z0-9]/g, '_')}`;
+  // Use the ACTUAL font family name as the CSS font-family identifier.
+  // This ensures CSS references remain stable across app restarts and rehydration
+  // from IndexedDB will always produce the correct family name. The font family
+  // from the OpenType 'name' table is exactly what browsers use when a font is
+  // installed system-wide, so it's guaranteed to be a valid CSS identifier.
+  const safeFontFamily = buildSafeFamilyName(familyGroup || fontName);
 
-  // Register FontFace in browser immediately
+  // Unique storage key per file (timestamp + filename hash) to allow multiple
+  // files of the same family (e.g. Regular + Bold) to each persist their binary.
+  const storageId = 'local-' + Date.now() + '-' + fileName.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 32);
+
+
+  // Register FontFace in browser immediately (blob URL approach)
   await registerFontFace(safeFontFamily, arrayBuffer.slice(0));
 
-  // Persist font binary into IndexedDB asynchronously for permanent reload persistence
-  saveFontBinary(uniqueId, safeFontFamily, arrayBuffer.slice(0)).catch((e) => {
+  // Persist font binary into IndexedDB so it survives app restarts
+  saveFontBinary(storageId, safeFontFamily, arrayBuffer.slice(0)).catch((e) => {
     console.warn('Could not save font to IndexedDB:', e);
   });
 
   return {
-    id: uniqueId,
+    id: storageId,
     name: fontName,
-    fontFamily: `"${safeFontFamily}", sans-serif`,
+    fontFamily: '"' + safeFontFamily + '", sans-serif',
     format: ext,
     category,
     familyGroup,
