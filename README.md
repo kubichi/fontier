@@ -1,6 +1,6 @@
 # Fontier 🔤
 
-> **Modern, high-performance desktop typography and font manager.**  
+> **Vibe-Coded modern font mananger.**  
 > A lightweight, open-source desktop font organizer and viewer built for designers, typographers, and developers.
 
 ![Fontier Banner](public/fontier_icon.png)
@@ -9,7 +9,7 @@
 
 ## Features
 
-- **Lightning-Fast Performance (8,000+ Fonts)**
+- **Performance isn't as bad as other electron apps. i think.**
   - Virtual windowed rendering renders only visible fonts in the viewport.
   - On-demand lazy font decoding keeps memory usage low (~180MB RAM) even with massive font collections.
 - **Hierarchical Subfolder Tree**
