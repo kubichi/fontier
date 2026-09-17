@@ -23,14 +23,16 @@ function extractFamilyGroup(familyName: string, fileName: string): string {
   return base || familyName || 'Untitled Family';
 }
 
-export async function parseFontFile(
-  file: File,
-  folderId?: string
+export async function parseFontBuffer(
+  fileName: string,
+  buffer: ArrayBuffer,
+  folderId?: string,
+  fileSize?: number
 ): Promise<FontItem> {
-  const ext = (file.name.split('.').pop()?.toUpperCase() || 'TTF') as FontFormat;
-  const arrayBuffer = await file.arrayBuffer();
+  const ext = (fileName.split('.').pop()?.toUpperCase() || 'TTF') as FontFormat;
+  const arrayBuffer = buffer.slice(0);
 
-  const fileBaseName = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
+  const fileBaseName = fileName.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
   let fontName = fileBaseName;
   let familyGroup = '';
   let designer = 'Unknown Designer';
@@ -45,13 +47,13 @@ export async function parseFontFile(
   let subfamily = 'Regular';
 
   try {
-    const parsedFont = opentype.parse(arrayBuffer);
+    const parsedFont = opentype.parse(arrayBuffer.slice(0));
     if (parsedFont && parsedFont.names) {
       const familyName = extractString(parsedFont.names.fontFamily);
       const fullName = extractString(parsedFont.names.fullName);
       const typographicFamily = extractString((parsedFont.names as any).preferredFamily || (parsedFont.names as any).typographicFamily);
       
-      familyGroup = typographicFamily || familyName || extractFamilyGroup(fullName || fontName, file.name);
+      familyGroup = typographicFamily || familyName || extractFamilyGroup(fullName || fontName, fileName);
       fontName = fullName || familyName || fontName;
 
       subfamily = extractString(parsedFont.names.fontSubfamily) || 'Regular';
@@ -75,7 +77,7 @@ export async function parseFontFile(
   }
 
   if (!familyGroup) {
-    familyGroup = extractFamilyGroup(fontName, file.name);
+    familyGroup = extractFamilyGroup(fontName, fileName);
   }
 
   // Scan font metadata (italic, bold, mono, serif, etc.) and apply matching system tags
@@ -83,7 +85,7 @@ export async function parseFontFile(
     fontName,
     subfamily,
     postScriptName,
-    fileName: file.name,
+    fileName,
     weight: subfamily.toLowerCase().includes('bold') ? 700 : 400,
     isItalic: subfamily.toLowerCase().includes('italic'),
   });
@@ -95,10 +97,10 @@ export async function parseFontFile(
   const safeFontFamily = `UserFont_${uniqueId.replace(/[^a-zA-Z0-9]/g, '_')}`;
 
   // Register FontFace in browser immediately
-  await registerFontFace(safeFontFamily, arrayBuffer);
+  await registerFontFace(safeFontFamily, arrayBuffer.slice(0));
 
   // Persist font binary into IndexedDB asynchronously for permanent reload persistence
-  saveFontBinary(uniqueId, safeFontFamily, arrayBuffer).catch((e) => {
+  saveFontBinary(uniqueId, safeFontFamily, arrayBuffer.slice(0)).catch((e) => {
     console.warn('Could not save font to IndexedDB:', e);
   });
 
@@ -129,10 +131,20 @@ export async function parseFontFile(
     copyright,
     postScriptName,
     numGlyphs,
-    fileSize: file.size,
-    fileName: file.name,
-    filePath: (file as unknown as { webkitRelativePath?: string }).webkitRelativePath || file.name,
+    fileSize: fileSize || arrayBuffer.byteLength,
+    fileName,
+    filePath: fileName,
     unitsPerEm,
     isCustomUploaded: true,
   };
+}
+
+export async function parseFontFile(
+  file: File,
+  folderId?: string
+): Promise<FontItem> {
+  const arrayBuffer = await file.arrayBuffer();
+  const item = await parseFontBuffer(file.name, arrayBuffer, folderId, file.size);
+  item.filePath = (file as unknown as { webkitRelativePath?: string }).webkitRelativePath || file.name;
+  return item;
 }

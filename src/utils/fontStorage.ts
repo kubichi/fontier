@@ -4,6 +4,7 @@ const DB_VERSION = 1;
 const STORE_NAME = 'font_binaries';
 
 let dbPromise: Promise<IDBDatabase> | null = null;
+const registeredFamilies = new Set<string>();
 
 function getDB(): Promise<IDBDatabase> {
   if (!dbPromise) {
@@ -32,9 +33,10 @@ function getDB(): Promise<IDBDatabase> {
 export async function saveFontBinary(id: string, familyName: string, buffer: ArrayBuffer): Promise<void> {
   try {
     const db = await getDB();
+    const cleanBuffer = buffer.slice(0);
     const tx = db.transaction(STORE_NAME, 'readwrite');
     const store = tx.objectStore(STORE_NAME);
-    store.put({ id, familyName, buffer, updatedAt: Date.now() });
+    store.put({ id, familyName, buffer: cleanBuffer, updatedAt: Date.now() });
     await new Promise<void>((resolve, reject) => {
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
@@ -45,17 +47,72 @@ export async function saveFontBinary(id: string, familyName: string, buffer: Arr
 }
 
 /**
- * Registers a FontFace object into document.fonts immediately.
+ * Injects a CSS @font-face style rule as a guaranteed backup alongside FontFace API.
+ */
+function injectFontFaceStyleRule(familyName: string, blobUrl: string): void {
+  if (typeof document === 'undefined') return;
+  const styleId = `fontier-font-${familyName.replace(/[^a-zA-Z0-9]/g, '_')}`;
+  let styleEl = document.getElementById(styleId) as HTMLStyleElement | null;
+  if (!styleEl) {
+    styleEl = document.createElement('style');
+    styleEl.id = styleId;
+    document.head.appendChild(styleEl);
+  }
+  styleEl.textContent = `
+    @font-face {
+      font-family: "${familyName}";
+      src: url("${blobUrl}") format("truetype"), url("${blobUrl}") format("opentype"), url("${blobUrl}") format("woff2");
+      font-weight: 100 900;
+      font-style: normal italic;
+      font-display: swap;
+    }
+  `;
+}
+
+/**
+ * Registers a FontFace object into document.fonts immediately with clean binary buffer and blob fallback.
  */
 export async function registerFontFace(safeFamilyName: string, buffer: ArrayBuffer): Promise<boolean> {
-  if (typeof document === 'undefined' || !('fonts' in document)) return false;
+  if (typeof document === 'undefined') return false;
+  
+  // Clean string identifier without quotes
+  const cleanFamily = safeFamilyName.replace(/["']/g, '').trim();
+  if (registeredFamilies.has(cleanFamily)) {
+    return true;
+  }
+
   try {
-    const fontFace = new FontFace(safeFamilyName, buffer);
-    await fontFace.load();
-    document.fonts.add(fontFace);
+    const cleanBuffer = buffer.slice(0);
+    const blob = new Blob([cleanBuffer], { type: 'font/truetype' });
+    const blobUrl = URL.createObjectURL(blob);
+
+    // 1. Try FontFace constructor from ArrayBuffer
+    try {
+      const fontFace = new FontFace(cleanFamily, cleanBuffer);
+      const loadedFace = await fontFace.load();
+      if ('fonts' in document) {
+        document.fonts.add(loadedFace);
+      }
+    } catch {
+      // 2. Try FontFace constructor from Blob URL
+      try {
+        const fontFaceUrl = new FontFace(cleanFamily, `url(${blobUrl})`);
+        const loadedFaceUrl = await fontFaceUrl.load();
+        if ('fonts' in document) {
+          document.fonts.add(loadedFaceUrl);
+        }
+      } catch {
+        // Fallback to style tag injection
+      }
+    }
+
+    // 3. Inject @font-face rule to guarantee CSS engine resolution across all render trees
+    injectFontFaceStyleRule(cleanFamily, blobUrl);
+
+    registeredFamilies.add(cleanFamily);
     return true;
   } catch (err) {
-    console.warn(`Failed to register FontFace for ${safeFamilyName}:`, err);
+    console.warn(`Failed to register FontFace for ${cleanFamily}:`, err);
     return false;
   }
 }
@@ -81,12 +138,10 @@ export async function rehydrateAllStoredFonts(): Promise<number> {
     for (const item of records) {
       if (item.buffer && item.familyName) {
         try {
-          const fontFace = new FontFace(item.familyName, item.buffer);
-          await fontFace.load();
-          document.fonts.add(fontFace);
-          count++;
-        } catch {
-          // ignore single font error
+          const ok = await registerFontFace(item.familyName, item.buffer);
+          if (ok) count++;
+        } catch (e) {
+          console.warn('Rehydration error for font', item.familyName, e);
         }
       }
     }

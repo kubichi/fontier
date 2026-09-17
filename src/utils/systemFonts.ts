@@ -1,4 +1,4 @@
-import { FontItem, FontCategory } from '../types';
+import { FontItem, FontCategory, FontStyle } from '../types';
 
 interface WindowsFontDef {
   name: string;
@@ -101,7 +101,7 @@ function quickCategorize(name: string): FontCategory {
 
 /**
  * Discovers installed Windows system fonts.
- * Optimized to handle 8,000+ fonts smoothly in batches without blocking the UI.
+ * Groups 8,000+ local font files into structured typeface families with full style variant counts.
  */
 export async function detectWindowsSystemFonts(
   onBatchProgress?: (loaded: number, total: number) => void
@@ -109,41 +109,86 @@ export async function detectWindowsSystemFonts(
   const result: FontItem[] = [];
   const discoveredNames = new Set<string>();
 
-  // 1. Try modern Chromium/Electron Local Font Access API
+  // 1. Modern Chromium/Electron Local Font Access API
   if (typeof window !== 'undefined' && 'queryLocalFonts' in window) {
     try {
       const localFonts: any[] = await (window as any).queryLocalFonts();
       const total = localFonts.length;
-      
-      // Process in micro-tasks to keep UI running at 60 FPS even with 8,000+ fonts
-      const BATCH = 300;
-      for (let i = 0; i < total; i += BATCH) {
-        const slice = localFonts.slice(i, i + BATCH);
-        for (const f of slice) {
-          if (!discoveredNames.has(f.family)) {
-            discoveredNames.add(f.family);
-            const cat = quickCategorize(f.family);
-            result.push({
-              id: `system-${f.family.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
-              name: f.family,
-              fontFamily: `"${f.family}", sans-serif`,
-              format: 'TTF',
-              category: cat,
-              tags: ['Windows System', 'Installed', cat],
-              stylesCount: 1,
-              styles: [{ name: f.style || 'Regular', weight: 400, style: 'normal' }],
-              active: true,
-              favorite: false,
-              provider: 'System',
-              designer: 'Windows System Foundry',
-              version: 'Windows System Font',
-              license: 'Standard Microsoft Windows OS Font License',
-            });
-          }
+
+      const familyMap = new Map<
+        string,
+        {
+          family: string;
+          fullName: string;
+          postscriptNames: string[];
+          styles: FontStyle[];
         }
-        if (onBatchProgress && total > 500) {
-          onBatchProgress(Math.min(i + BATCH, total), total);
-          // Yield to main thread
+      >();
+
+      // Group all font files / faces into typeface families
+      for (const f of localFonts) {
+        const fam = f.family || f.fullName;
+        if (!fam) continue;
+
+        let entry = familyMap.get(fam);
+        if (!entry) {
+          entry = {
+            family: fam,
+            fullName: f.fullName || fam,
+            postscriptNames: [],
+            styles: [],
+          };
+          familyMap.set(fam, entry);
+        }
+
+        if (f.postscriptName && !entry.postscriptNames.includes(f.postscriptName)) {
+          entry.postscriptNames.push(f.postscriptName);
+        }
+
+        const styleName = f.style || 'Regular';
+        const sLower = styleName.toLowerCase();
+        const isItalic = sLower.includes('italic') || sLower.includes('oblique');
+        const isBold = sLower.includes('bold') || sLower.includes('black') || sLower.includes('heavy');
+        const isLight = sLower.includes('light') || sLower.includes('thin') || sLower.includes('hairline');
+        const isSemiBold = sLower.includes('semi') || sLower.includes('demi') || sLower.includes('medium');
+        const weight = isLight ? 300 : isSemiBold ? 600 : isBold ? 700 : 400;
+
+        if (!entry.styles.some((s) => s.name.toLowerCase() === styleName.toLowerCase())) {
+          entry.styles.push({
+            name: styleName,
+            weight,
+            style: isItalic ? 'italic' : 'normal',
+          });
+        }
+      }
+
+      // Convert grouped families into FontItems
+      let processed = 0;
+      for (const [familyName, data] of familyMap.entries()) {
+        discoveredNames.add(familyName);
+        const cat = quickCategorize(familyName);
+        
+        result.push({
+          id: `system-${familyName.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+          name: familyName,
+          fontFamily: `"${familyName}", sans-serif`,
+          format: 'TTF',
+          category: cat,
+          tags: ['Windows System', 'Installed', cat, `${data.styles.length} styles`],
+          stylesCount: Math.max(1, data.styles.length),
+          styles: data.styles.length > 0 ? data.styles : [{ name: 'Regular', weight: 400, style: 'normal' }],
+          active: true,
+          favorite: false,
+          provider: 'System',
+          designer: 'Windows System Foundry',
+          version: `${data.styles.length} styles (${total} font files indexed)`,
+          license: 'Standard Microsoft Windows OS Font License',
+          postScriptName: data.postscriptNames[0] || '',
+        });
+
+        processed += data.styles.length;
+        if (onBatchProgress && processed % 500 === 0) {
+          onBatchProgress(Math.min(processed, total), total);
           await new Promise((r) => setTimeout(r, 0));
         }
       }

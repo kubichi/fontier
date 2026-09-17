@@ -1,8 +1,9 @@
 import React, { useState, useRef } from 'react';
-import { X, Upload, FolderPlus, FileText, CheckCircle2, AlertCircle } from 'lucide-react';
-import { FolderItem, FontItem, FontFormat, FontCategory } from '../types';
-import { parseFontFile } from '../utils/fontParser';
+import { X, Upload, FolderPlus, Folder, CheckCircle2, AlertCircle, HardDrive } from 'lucide-react';
+import { FolderItem, FontItem, FontCategory } from '../types';
+import { parseFontFile, parseFontBuffer } from '../utils/fontParser';
 import { autoTagFontMetadata } from '../utils/autoTagger';
+import { scanDroppedItems, scanDirectoryHandle } from '../utils/fileScanner';
 
 interface AddFontModalProps {
   isOpen: boolean;
@@ -32,8 +33,9 @@ export const AddFontModal: React.FC<AddFontModalProps> = ({
   const [processProgress, setProcessProgress] = useState<string>('');
   const [isDragging, setIsDragging] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const folderModalInputRef = useRef<HTMLInputElement>(null);
+  const directoryInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
 
@@ -46,20 +48,11 @@ export const AddFontModal: React.FC<AddFontModalProps> = ({
     setIsDragging(false);
   };
 
-  const processFiles = (filesList: FileList | File[]) => {
-    const validFiles: File[] = [];
-    for (let i = 0; i < filesList.length; i++) {
-      const f = filesList[i];
-      const ext = f.name.split('.').pop()?.toLowerCase();
-      if (['ttf', 'otf', 'woff', 'woff2'].includes(ext || '')) {
-        validFiles.push(f);
-      }
-    }
-
+  const setFilesState = (validFiles: File[], folderHintName?: string) => {
     if (validFiles.length === 0) {
       setStatusMessage({
         type: 'error',
-        text: 'Please upload valid font files (.ttf, .otf, .woff, .woff2)',
+        text: 'No valid font files (.ttf, .otf, .woff, .woff2) found.',
       });
       return;
     }
@@ -81,54 +74,158 @@ export const AddFontModal: React.FC<AddFontModalProps> = ({
       }
       setDetectedTags(auto.tags);
     } else {
-      setFontName(`Bulk Import (${validFiles.length} fonts)`);
-      setDetectedTags(['Bulk Import']);
+      setFontName(folderHintName ? `Folder: ${folderHintName}` : `Import (${validFiles.length} fonts)`);
+      setDetectedTags(['Imported']);
     }
 
     setStatusMessage(null);
   };
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      processFiles(e.dataTransfer.files);
+    if (e.dataTransfer) {
+      setIsProcessing(true);
+      setProcessProgress('Reading dropped folder structure...');
+      try {
+        const { files, folderName } = await scanDroppedItems(e.dataTransfer);
+        setFilesState(files, folderName);
+      } catch (err) {
+        console.warn('Error reading dropped files:', err);
+      } finally {
+        setIsProcessing(false);
+        setProcessProgress('');
+      }
     }
   };
 
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      processFiles(e.target.files);
+      const all = Array.from(e.target.files);
+      const valid = all.filter((f) => {
+        const ext = f.name.split('.').pop()?.toLowerCase();
+        return ['ttf', 'otf', 'woff', 'woff2', 'ttc'].includes(ext || '');
+      });
+      setFilesState(valid);
     }
+    e.target.value = '';
+  };
+
+  const handleDirectoryInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const all = Array.from(e.target.files);
+      const valid = all.filter((f) => {
+        const ext = f.name.split('.').pop()?.toLowerCase();
+        return ['ttf', 'otf', 'woff', 'woff2', 'ttc'].includes(ext || '');
+      });
+      let folderName = 'Local Folder';
+      if (all[0].webkitRelativePath) {
+        const parts = all[0].webkitRelativePath.split('/');
+        if (parts.length > 1) folderName = parts[0];
+      }
+      setFilesState(valid, folderName);
+    }
+    e.target.value = '';
+  };
+
+  // Open Native Directory Picker (Electron or Web File System Access)
+  const handlePickDirectory = async () => {
+    // 1. Electron Native Folder Picker
+    if (typeof (window as any).electronAPI?.selectDirectory === 'function') {
+      try {
+        setIsProcessing(true);
+        setProcessProgress('Scanning directory and subfolders...');
+        const res = await (window as any).electronAPI.selectDirectory();
+        if (res && res.files && res.files.length > 0) {
+          const parsedList: FontItem[] = [];
+          for (let i = 0; i < res.files.length; i++) {
+            const f = res.files[i];
+            try {
+              const item = await parseFontBuffer(f.name, f.buffer, selectedFolderId || undefined, f.size);
+              item.filePath = f.path;
+              parsedList.push(item);
+            } catch (err) {
+              console.warn(`Could not parse ${f.name}:`, err);
+            }
+          }
+          if (parsedList.length > 0) {
+            if (onAddCustomFonts) {
+              onAddCustomFonts(parsedList);
+            } else {
+              parsedList.forEach((font) => onAddCustomFont(font));
+            }
+            onClose();
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('Electron folder selection error:', err);
+      } finally {
+        setIsProcessing(false);
+        setProcessProgress('');
+      }
+    }
+
+    // 2. Web File System Access Directory Picker
+    if (typeof (window as any).showDirectoryPicker === 'function') {
+      try {
+        setIsProcessing(true);
+        setProcessProgress('Scanning directory tree...');
+        const dirHandle = await (window as any).showDirectoryPicker({
+          id: 'fontbase-modal-picker',
+          mode: 'read',
+        });
+        const files: File[] = [];
+        await scanDirectoryHandle(dirHandle, files);
+        setFilesState(files, dirHandle.name);
+        return;
+      } catch (err: any) {
+        if (err.name === 'AbortError') return;
+        console.warn('showDirectoryPicker fallback:', err);
+      } finally {
+        setIsProcessing(false);
+        setProcessProgress('');
+      }
+    }
+
+    // 3. Fallback: webkitdirectory input
+    directoryInputRef.current?.click();
   };
 
   const handleAddFontSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (selectedFiles.length === 0) {
-      setStatusMessage({ type: 'error', text: 'Please select font file(s).' });
+      setStatusMessage({ type: 'error', text: 'Please select font files or a folder.' });
       return;
     }
 
     setIsProcessing(true);
     try {
       const parsedList: FontItem[] = [];
-      for (let i = 0; i < selectedFiles.length; i++) {
-        const file = selectedFiles[i];
-        setProcessProgress(`Parsing font ${i + 1} of ${selectedFiles.length}...`);
-        try {
-          const parsed = await parseFontFile(file, selectedFolderId || undefined);
-          if (selectedFiles.length === 1 && fontName.trim() && fontName.trim() !== parsed.name) {
-            parsed.name = fontName.trim();
-          }
-          if (selectedFiles.length === 1) {
-            parsed.category = fontCategory;
-            if (detectedTags.length > 0) {
-              parsed.tags = Array.from(new Set([...(parsed.tags || []), ...detectedTags]));
+      const BATCH = 20;
+
+      for (let i = 0; i < selectedFiles.length; i += BATCH) {
+        const batch = selectedFiles.slice(i, i + BATCH);
+        for (const file of batch) {
+          try {
+            const parsed = await parseFontFile(file, selectedFolderId || undefined);
+            if (selectedFiles.length === 1 && fontName.trim() && fontName.trim() !== parsed.name) {
+              parsed.name = fontName.trim();
             }
+            if (selectedFiles.length === 1) {
+              parsed.category = fontCategory;
+              if (detectedTags.length > 0) {
+                parsed.tags = Array.from(new Set([...(parsed.tags || []), ...detectedTags]));
+              }
+            }
+            parsedList.push(parsed);
+          } catch (fileErr) {
+            console.warn(`Could not parse ${file.name}:`, fileErr);
           }
-          parsedList.push(parsed);
-        } catch (fileErr) {
-          console.warn(`Could not parse ${file.name}:`, fileErr);
+        }
+        if (selectedFiles.length > 30) {
+          setProcessProgress(`Parsing fonts ${Math.min(i + BATCH, selectedFiles.length)} of ${selectedFiles.length}...`);
+          await new Promise((r) => setTimeout(r, 0));
         }
       }
 
@@ -170,7 +267,7 @@ export const AddFontModal: React.FC<AddFontModalProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-[#2d2d2d] bg-[#1a1a1a]">
           <div className="flex items-center space-x-2">
-            <span className="text-sm font-semibold text-white">Add to FontBase</span>
+            <span className="text-sm font-semibold text-white">Import Fonts & Folders</span>
           </div>
           <button
             onClick={onClose}
@@ -191,7 +288,7 @@ export const AddFontModal: React.FC<AddFontModalProps> = ({
             }`}
           >
             <Upload className="w-3.5 h-3.5" />
-            <span>Import Font File</span>
+            <span>Import Fonts</span>
           </button>
           <button
             onClick={() => setActiveTab('folder')}
@@ -205,6 +302,26 @@ export const AddFontModal: React.FC<AddFontModalProps> = ({
             <span>New Folder</span>
           </button>
         </div>
+
+        {/* Hidden inputs */}
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleFileInputChange}
+          accept=".ttf,.otf,.woff,.woff2,.ttc"
+          multiple
+          className="hidden"
+        />
+        <input
+          type="file"
+          ref={directoryInputRef}
+          onChange={handleDirectoryInputChange}
+          /* @ts-expect-error standard directory attributes */
+          webkitdirectory="true"
+          directory="true"
+          multiple
+          className="hidden"
+        />
 
         {/* Body */}
         <div className="p-5">
@@ -223,51 +340,80 @@ export const AddFontModal: React.FC<AddFontModalProps> = ({
 
           {activeTab === 'font' ? (
             <form onSubmit={handleAddFontSubmit} className="space-y-4 text-xs">
-              {/* Dropzone */}
+              {/* Dropzone with Folder & File Selection Options */}
               <div
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
-                onClick={() => fileInputRef.current?.click()}
-                className={`border-2 border-dashed rounded-lg p-6 flex flex-col items-center justify-center cursor-pointer transition-colors ${
+                className={`border-2 border-dashed rounded-lg p-5 flex flex-col items-center justify-center transition-colors ${
                   isDragging
                     ? 'border-[#4ade80] bg-[#4ade80]/10'
                     : selectedFiles.length > 0
                     ? 'border-emerald-600/50 bg-emerald-950/20'
-                    : 'border-[#383838] hover:border-[#555555] bg-[#191919]'
+                    : 'border-[#383838] bg-[#191919]'
                 }`}
               >
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleFileInputChange}
-                  accept=".ttf,.otf,.woff,.woff2"
-                  multiple
-                  className="hidden"
-                />
                 {selectedFiles.length > 0 ? (
-                  <div className="flex flex-col items-center space-y-1 text-center">
+                  <div className="flex flex-col items-center space-y-2 text-center">
                     <CheckCircle2 className="w-7 h-7 text-[#4ade80]" />
                     <span className="font-semibold text-white">
                       {selectedFiles.length === 1
                         ? selectedFiles[0].name
-                        : `${selectedFiles.length} font files selected`}
+                        : `${selectedFiles.length} font files found`}
                     </span>
                     <span className="text-[11px] text-[#888888]">
                       {selectedFiles.length === 1
-                        ? `${(selectedFiles[0].size / 1024).toFixed(1)} KB • Click or drop more to replace`
-                        : `${(selectedFiles.reduce((acc, f) => acc + f.size, 0) / (1024 * 1024)).toFixed(2)} MB total • Bulk import ready`}
+                        ? `${(selectedFiles[0].size / 1024).toFixed(1)} KB`
+                        : `${(selectedFiles.reduce((acc, f) => acc + f.size, 0) / (1024 * 1024)).toFixed(2)} MB total across folders`}
                     </span>
+                    <div className="flex items-center space-x-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={handlePickDirectory}
+                        className="px-2.5 py-1 bg-[#282828] hover:bg-[#333333] text-xs text-[#dddddd] rounded border border-[#444444] transition-colors"
+                      >
+                        Change Folder
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="px-2.5 py-1 bg-[#282828] hover:bg-[#333333] text-xs text-[#dddddd] rounded border border-[#444444] transition-colors"
+                      >
+                        Select Files
+                      </button>
+                    </div>
                   </div>
                 ) : (
-                  <div className="flex flex-col items-center space-y-2 text-center">
+                  <div className="flex flex-col items-center space-y-3 text-center">
                     <Upload className="w-7 h-7 text-[#777777]" />
-                    <span className="text-[#cccccc] font-medium">
-                      Drag and drop font files or folder here (Bulk selection supported)
-                    </span>
-                    <span className="text-[11px] text-[#777777]">
-                      Hold Ctrl or Shift to select multiple .TTF, .OTF, .WOFF, .WOFF2 files
-                    </span>
+                    <div className="space-y-0.5">
+                      <span className="text-[#cccccc] font-medium block">
+                        Drag and drop font folders or files here
+                      </span>
+                      <span className="text-[11px] text-[#777777] block">
+                        Scans all nested subfolders automatically
+                      </span>
+                    </div>
+
+                    {/* Prominent Action Buttons */}
+                    <div className="flex items-center gap-2.5 pt-1">
+                      <button
+                        type="button"
+                        onClick={handlePickDirectory}
+                        className="flex items-center space-x-1.5 px-3 py-1.5 bg-[#1e293b] hover:bg-[#2e3e57] text-[#60a5fa] hover:text-[#93c5fd] rounded border border-[#3b82f6]/40 font-medium transition-colors cursor-pointer"
+                      >
+                        <Folder className="w-3.5 h-3.5" />
+                        <span>Select Folder</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="flex items-center space-x-1.5 px-3 py-1.5 bg-[#252525] hover:bg-[#303030] text-[#e0e0e0] rounded border border-[#404040] transition-colors cursor-pointer"
+                      >
+                        <HardDrive className="w-3.5 h-3.5 text-[#888888]" />
+                        <span>Select Files</span>
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -284,7 +430,7 @@ export const AddFontModal: React.FC<AddFontModalProps> = ({
               {detectedTags.length > 0 && (
                 <div className="bg-[#141414] border border-[#2b2b2b] rounded-lg p-2.5 flex items-center justify-between">
                   <span className="text-[11px] text-[#888888]">
-                    Auto-detected system tags:
+                    Auto-detected tags:
                   </span>
                   <div className="flex flex-wrap gap-1">
                     {detectedTags.map((tag) => (
@@ -301,7 +447,7 @@ export const AddFontModal: React.FC<AddFontModalProps> = ({
 
               {/* Font Name */}
               <div className="space-y-1">
-                <label className="block text-[11px] text-[#aaaaaa]">Font Display Name</label>
+                <label className="block text-[11px] text-[#aaaaaa]">Display Name</label>
                 <input
                   type="text"
                   value={fontName}
@@ -358,35 +504,25 @@ export const AddFontModal: React.FC<AddFontModalProps> = ({
                 </button>
                 <button
                   type="submit"
-                  disabled={selectedFiles.length === 0 || isProcessing}
-                  className="px-4 py-1.5 bg-[#22c55e] hover:bg-[#16a34a] disabled:opacity-50 disabled:pointer-events-none text-black font-semibold rounded transition-colors flex items-center space-x-1.5"
+                  disabled={isProcessing || selectedFiles.length === 0}
+                  className="px-4 py-1.5 bg-[#16a34a] hover:bg-[#15803d] disabled:opacity-50 text-white font-medium rounded transition-colors"
                 >
-                  {isProcessing ? (
-                    <>
-                      <div className="w-3 h-3 border-2 border-black border-t-transparent rounded-full animate-spin" />
-                      <span>Importing...</span>
-                    </>
-                  ) : (
-                    <span>
-                      {selectedFiles.length > 1
-                        ? `Import ${selectedFiles.length} Fonts`
-                        : 'Add Font'}
-                    </span>
-                  )}
+                  {selectedFiles.length > 1
+                    ? `Import ${selectedFiles.length} Fonts`
+                    : 'Import Font'}
                 </button>
               </div>
             </form>
           ) : (
-            /* Folder Creation Tab */
             <form onSubmit={handleCreateFolderSubmit} className="space-y-4 text-xs">
               <div className="space-y-1">
-                <label className="block text-[11px] text-[#aaaaaa]">New Folder Name</label>
+                <label className="block text-[11px] text-[#aaaaaa]">Folder Name</label>
                 <input
                   type="text"
-                  autoFocus
                   value={newFolderName}
                   onChange={(e) => setNewFolderName(e.target.value)}
-                  placeholder="e.g. Client X Fonts, Logo Design, 8-bit Games"
+                  placeholder="e.g. Branding 2025, Web Fonts, UI Icons"
+                  autoFocus
                   className="w-full bg-[#181818] border border-[#333333] focus:border-[#4ade80] rounded px-3 py-1.5 text-white focus:outline-none text-xs"
                 />
               </div>
@@ -402,7 +538,7 @@ export const AddFontModal: React.FC<AddFontModalProps> = ({
                 <button
                   type="submit"
                   disabled={!newFolderName.trim()}
-                  className="px-4 py-1.5 bg-[#22c55e] hover:bg-[#16a34a] disabled:opacity-50 disabled:pointer-events-none text-black font-semibold rounded transition-colors"
+                  className="px-4 py-1.5 bg-[#16a34a] hover:bg-[#15803d] disabled:opacity-50 text-white font-medium rounded transition-colors"
                 >
                   Create Folder
                 </button>

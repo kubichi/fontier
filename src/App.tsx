@@ -10,9 +10,11 @@ import { AddFontModal } from './components/AddFontModal';
 import { SettingsModal } from './components/SettingsModal';
 import { FontItem, FolderItem, TextAlignment, ViewMode, FontFilters, AppSettings } from './types';
 import { INITIAL_FONTS, INITIAL_FOLDERS } from './data/defaultFonts';
-import { parseFontFile } from './utils/fontParser';
+import { parseFontFile, parseFontBuffer } from './utils/fontParser';
 import { autoTagFontMetadata } from './utils/autoTagger';
 import { detectWindowsSystemFonts } from './utils/systemFonts';
+import { rehydrateAllStoredFonts } from './utils/fontStorage';
+import { scanDroppedItems, scanDirectoryHandle } from './utils/fileScanner';
 import { Folder, Search, Plus, HardDrive, RefreshCw, X, Check } from 'lucide-react';
 
 const DEFAULT_FILTERS: FontFilters = {
@@ -131,6 +133,21 @@ export default function App() {
   const deferredPreviewText = useDeferredValue(previewText);
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const [systemFontProgress, setSystemFontProgress] = useState<{ loaded: number; total: number } | null>(null);
+  const [downloadedUpdate, setDownloadedUpdate] = useState<{ version?: string } | null>(null);
+
+  // Listen for auto-updater events from Electron
+  useEffect(() => {
+    if (typeof window !== 'undefined' && (window as any).electronAPI?.onUpdaterStatus) {
+      const unsub = (window as any).electronAPI.onUpdaterStatus((data: any) => {
+        if (data.status === 'downloaded') {
+          setDownloadedUpdate({ version: data.version });
+        }
+      });
+      return () => {
+        if (typeof unsub === 'function') unsub();
+      };
+    }
+  }, []);
 
   // Auto-detect Windows system fonts progressively without locking UI
   useEffect(() => {
@@ -176,6 +193,13 @@ export default function App() {
     return () => {
       isCancelled = true;
     };
+  }, []);
+
+  // Rehydrate stored font binaries into document.fonts and inject styles on startup
+  useEffect(() => {
+    rehydrateAllStoredFonts().catch((err) => {
+      console.warn('Could not rehydrate stored font binaries:', err);
+    });
   }, []);
 
   // Reset visible window count when navigation or filter changes
@@ -468,7 +492,52 @@ export default function App() {
 
   // Trigger local directory picking (with subfolder recursion)
   const handleOpenLocalFolder = async () => {
-    // Check if Native File System Directory Picker is available (Electron & modern Chromium)
+    // 1. Electron Native Folder Selection
+    if (typeof (window as any).electronAPI?.selectDirectory === 'function') {
+      try {
+        setIsScanning(true);
+        setNotification('Scanning selected folder and all subfolders...');
+        const res = await (window as any).electronAPI.selectDirectory();
+        if (res && res.files && res.files.length > 0) {
+          const parsedFonts: FontItem[] = [];
+          const folderId = `folder-${Date.now()}`;
+          const folderLabel = res.folderName || 'Local Fonts';
+
+          for (const f of res.files) {
+            try {
+              const item = await parseFontBuffer(f.name, f.buffer, folderId, f.size);
+              item.filePath = f.path;
+              parsedFonts.push(item);
+            } catch (err) {
+              console.warn(`Could not parse font ${f.name}:`, err);
+            }
+          }
+
+          if (parsedFonts.length > 0) {
+            const newFolder: FolderItem = {
+              id: folderId,
+              name: folderLabel,
+              count: parsedFonts.length,
+              color: '#888888',
+            };
+            setFolders((prev) => [...prev, newFolder]);
+            setFonts((prev) => [...parsedFonts, ...prev]);
+            setCurrentFilter(`folder-${folderId}`);
+            setSelectedFontForInspector(parsedFonts[0]);
+            setShowInspector(true);
+            setNotification(`Imported ${parsedFonts.length} font${parsedFonts.length === 1 ? '' : 's'} from "${folderLabel}"`);
+            setTimeout(() => setNotification(null), 5000);
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('Electron folder selection error:', err);
+      } finally {
+        setIsScanning(false);
+      }
+    }
+
+    // 2. Check if Native File System Directory Picker is available (Electron & modern Chromium)
     if (typeof (window as any).showDirectoryPicker === 'function') {
       try {
         const dirHandle = await (window as any).showDirectoryPicker({
@@ -478,7 +547,7 @@ export default function App() {
 
         setNotification(`Scanning "${dirHandle.name}" and subfolders...`);
         const files: File[] = [];
-        await collectFilesRecursively(dirHandle, files);
+        await scanDirectoryHandle(dirHandle, files);
 
         if (files.length > 0) {
           await processAndImportFontFiles(files, dirHandle.name, dirHandle);
@@ -496,7 +565,7 @@ export default function App() {
       }
     }
 
-    // Fallback: Trigger standard HTML5 directory input (webkitdirectory recursively lists all subfolder files)
+    // 3. Fallback: Trigger standard HTML5 directory input (webkitdirectory recursively lists all subfolder files)
     folderInputRef.current?.click();
   };
 
@@ -631,10 +700,23 @@ export default function App() {
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     setIsGlobalDragging(false);
-    if (!e.dataTransfer.files || e.dataTransfer.files.length === 0) return;
+    if (!e.dataTransfer) return;
 
-    const files = Array.from(e.dataTransfer.files);
-    await processAndImportFontFiles(files, 'Imported Local Fonts');
+    try {
+      setIsScanning(true);
+      setNotification('Reading dropped folders and font files...');
+      const { files, folderName } = await scanDroppedItems(e.dataTransfer);
+      if (files.length > 0) {
+        await processAndImportFontFiles(files, folderName);
+      } else {
+        setNotification('No font files (.ttf, .otf, .woff, .woff2) found in dropped items.');
+        setTimeout(() => setNotification(null), 4000);
+      }
+    } catch (err) {
+      console.warn('Error reading dropped files:', err);
+    } finally {
+      setIsScanning(false);
+    }
   };
 
   // Compute navigation counts in a single pass (optimized for 8,000+ fonts)
@@ -825,6 +907,36 @@ export default function App() {
           <button
             onClick={() => setNotification(null)}
             className="text-[#94a3b8] hover:text-white ml-2"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* Auto-Update Downloaded Ready Banner */}
+      {downloadedUpdate && (
+        <div className="absolute top-12 left-1/2 -translate-x-1/2 z-50 bg-[#14532d] border border-[#22c55e] text-white px-4 py-2 rounded-lg shadow-2xl text-xs flex items-center space-x-3 animate-in fade-in duration-200">
+          <div className="flex items-center space-x-2">
+            <span className="w-2 h-2 rounded-full bg-[#4ade80] animate-ping" />
+            <span className="font-semibold">
+              Fontier {downloadedUpdate.version ? `v${downloadedUpdate.version}` : 'Update'} is ready!
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              if (typeof window !== 'undefined' && (window as any).electronAPI?.restartAndInstallUpdate) {
+                (window as any).electronAPI.restartAndInstallUpdate();
+              }
+            }}
+            className="px-2.5 py-1 bg-white hover:bg-[#f0fdf4] text-[#14532d] font-bold rounded shadow-xs transition-colors cursor-pointer"
+          >
+            Restart to Update
+          </button>
+          <button
+            type="button"
+            onClick={() => setDownloadedUpdate(null)}
+            className="text-[#86efac] hover:text-white"
           >
             <X className="w-3.5 h-3.5" />
           </button>
