@@ -319,7 +319,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
         }`}
       >
 
-          <div className="overflow-y-auto px-2 py-3 space-y-4 flex-1 text-xs">
+          <div
+            className="overflow-y-auto no-scrollbar px-2 py-3 space-y-4 flex-1 text-xs"
+            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+          >
             {/* Primary font filters */}
             <div className="space-y-0.5">
               <button
