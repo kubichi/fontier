@@ -1,4 +1,4 @@
-﻿name: Build & Release Desktop Apps (Windows, macOS, Linux)
+name: Build & Release Desktop Apps (Windows, macOS, Linux)
 
 on:
   push:
@@ -37,15 +37,21 @@ jobs:
 
       - name: Package Windows (EXE)
         if: runner.os == 'Windows'
-        run: npx electron-builder --win nsis
+        run: npx electron-builder --win nsis --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Package macOS (DMG & ZIP)
         if: runner.os == 'macOS'
-        run: npx electron-builder --mac dmg zip
+        run: npx electron-builder --mac dmg zip --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Package Linux (AppImage, DEB, tar.gz)
         if: runner.os == 'Linux'
-        run: npx electron-builder --linux AppImage deb tar.gz
+        run: npx electron-builder --linux AppImage deb tar.gz --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
