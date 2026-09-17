@@ -60,6 +60,10 @@ function createWindow() {
       try {
         const entries = await fs.promises.readdir(dir, { withFileTypes: true });
         for (const entry of entries) {
+          // Ignore hidden files/directories, macOS AppleDouble metadata files (._*), and __MACOSX
+          if (entry.name.startsWith('.') || entry.name.startsWith('._') || entry.name === '__MACOSX') {
+            continue;
+          }
           const fullPath = path.join(dir, entry.name);
           if (entry.isDirectory()) {
             const nested = await scanDir(fullPath);

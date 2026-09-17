@@ -9,6 +9,8 @@
 const FONT_EXTENSIONS = new Set(['ttf', 'otf', 'woff', 'woff2', 'ttc']);
 
 export function isFontFileName(fileName: string): boolean {
+  // Ignore hidden dot files and macOS AppleDouble resource forks (e.g. ._font.otf)
+  if (fileName.startsWith('.') || fileName.startsWith('._')) return false;
   const ext = fileName.split('.').pop()?.toLowerCase();
   return ext ? FONT_EXTENSIONS.has(ext) : false;
 }
@@ -34,6 +36,7 @@ export async function scanDirectoryHandle(
 
   try {
     for await (const entry of dirHandle.values()) {
+      if (entry.name.startsWith('.') || entry.name === '__MACOSX') continue;
       if (entry.kind === 'file') {
         if (isFontFileName(entry.name)) {
           try {
@@ -68,6 +71,7 @@ export async function scanDirectoryHandleWithPaths(
 
   try {
     for await (const entry of dirHandle.values()) {
+      if (entry.name.startsWith('.') || entry.name === '__MACOSX') continue;
       const entryRelPath = relBase ? relBase + '/' + entry.name : entry.name;
       if (entry.kind === 'file') {
         if (isFontFileName(entry.name)) {
@@ -98,6 +102,7 @@ async function scanEntryRecursively(
   relBase = ''
 ): Promise<void> {
   if (!entry) return;
+  if (entry.name && (entry.name.startsWith('.') || entry.name === '__MACOSX')) return;
 
   const entryRelPath = relBase ? relBase + '/' + entry.name : entry.name;
 

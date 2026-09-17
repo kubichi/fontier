@@ -41,10 +41,14 @@ export default function App() {
       if (saved) {
         const parsed: FontItem[] = JSON.parse(saved);
         return parsed
-          // Migration: filter out Local fonts that used the old ephemeral random family name
-          // scheme (UserFont_local_XXXX). These can't render correctly since their IndexedDB
-          // binaries are cleared by the v2 schema migration. Users must re-import their folders.
+          // Migration: filter out hidden AppleDouble dot files (._*) and obsolete family names
           .filter((f) => {
+            if (f.name && (f.name.startsWith('._') || f.name.startsWith('.'))) {
+              return false;
+            }
+            if (f.fileName && (f.fileName.startsWith('._') || f.fileName.startsWith('.'))) {
+              return false;
+            }
             if (f.provider === 'Local' && f.fontFamily && f.fontFamily.includes('UserFont_local_')) {
               return false;
             }
@@ -83,7 +87,8 @@ export default function App() {
     try {
       const saved = localStorage.getItem('fontbase_folders');
       if (saved) {
-        return JSON.parse(saved);
+        const parsed: FolderItem[] = JSON.parse(saved);
+        return parsed.filter((f) => !f.name.startsWith('.') && f.name !== '__MACOSX');
       }
     } catch (e) {
       console.error(e);
@@ -474,7 +479,11 @@ export default function App() {
       const subfolderMap = new Map<string, ScannedFontFile[]>();
 
       for (const entry of scannedFiles) {
+        const fileName = entry.file.name || '';
+        if (fileName.startsWith('.') || fileName.startsWith('._')) continue;
         const relPath = entry.relativePath.replace(/\\/g, '/').replace(/^\//, '');
+        if (relPath.includes('/.') || relPath.includes('/__MACOSX') || relPath.startsWith('.')) continue;
+
         const parts = relPath.split('/');
         const subParts = parts.slice(0, -1);
         const subfolderKey = subParts.join('/'); // full subfolder path e.g. "helvetica"
@@ -507,6 +516,7 @@ export default function App() {
         let currentParentId = rootFolderId;
 
         for (let i = 0; i < parts.length; i++) {
+          if (parts[i].startsWith('.') || parts[i] === '__MACOSX') continue;
           currentPath = currentPath ? `${currentPath}/${parts[i]}` : parts[i];
           if (!folderIdByPath.has(currentPath)) {
             const subId = `folder-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -784,6 +794,7 @@ export default function App() {
     const allFiles = Array.from(fileList);
     // Filter only font files across all subfolders
     const fontFiles = allFiles.filter((f) => {
+      if (f.name.startsWith('.') || f.name.startsWith('._')) return false;
       const ext = f.name.split('.').pop()?.toLowerCase();
       return ['ttf', 'otf', 'woff', 'woff2'].includes(ext || '');
     });
