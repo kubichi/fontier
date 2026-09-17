@@ -3,7 +3,7 @@
 > **Modern, high-performance desktop typography and font manager.**  
 > A lightweight, open-source desktop font organizer and viewer built for designers, typographers, and developers.
 
-![Fontier Banner](public/icon.png)
+![Fontier Banner](public/fontier_icon.png)
 
 ---
 
