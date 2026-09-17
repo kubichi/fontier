@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Menu,
   Layers,
@@ -17,6 +17,9 @@ import {
   RefreshCw,
   ArrowUp,
   ArrowDown,
+  CheckSquare,
+  Square,
+  AlertTriangle,
 } from 'lucide-react';
 import { FolderItem } from '../types';
 
@@ -36,8 +39,10 @@ interface SidebarProps {
   currentFilter: string;
   onSelectFilter: (filterId: string) => void;
   folders: FolderItem[];
-  onCreateFolder: (name: string, color?: string) => void;
+  onCreateFolder: (name: string, color?: string, parentId?: string) => void;
   onDeleteFolder: (folderId: string) => void;
+  onDeleteFolderFromDisk?: (folderId: string) => void;
+  onBulkDeleteFolders?: (folderIds: string[], deleteFromDisk: boolean) => void;
   onChangeFolderColor?: (folderId: string, color: string) => void;
   onMoveFolderUp?: (folderId: string) => void;
   onMoveFolderDown?: (folderId: string) => void;
@@ -67,6 +72,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   folders,
   onCreateFolder,
   onDeleteFolder,
+  onDeleteFolderFromDisk,
+  onBulkDeleteFolders,
   onChangeFolderColor,
   onMoveFolderUp,
   onMoveFolderDown,
@@ -87,6 +94,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [newFolderColor, setNewFolderColor] = useState('#888888');
   const [showFolderInput, setShowFolderInput] = useState(false);
   const [activeColorPickerFolderId, setActiveColorPickerFolderId] = useState<string | null>(null);
+
+  // Scaler / Resizer state (default 240px, min 180px, max 550px)
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('fontier_sidebar_width');
+      return saved ? Math.max(180, Math.min(550, parseInt(saved, 10))) : 240;
+    } catch {
+      return 240;
+    }
+  });
+  const [isResizing, setIsResizing] = useState(false);
+
+  // Hierarchical folder collapse state
+  const [collapsedFolderIds, setCollapsedFolderIds] = useState<Set<string>>(new Set());
+
+  // Bulk folder selection mode
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedFolderIds, setSelectedFolderIds] = useState<Set<string>>(new Set());
+
+  // Confirm delete from device modal state
+  const [confirmDeviceDelete, setConfirmDeviceDelete] = useState<{ folderIds: string[]; folderNames: string[] } | null>(null);
+
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -96,6 +125,32 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const isLight = theme === 'light';
   const colorPickerRef = useRef<HTMLDivElement>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
+
+  // Drag resizer handler
+  const handleMouseDownResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+    const startX = e.clientX;
+    const startWidth = sidebarWidth;
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const delta = moveEvent.clientX - startX;
+      const newWidth = Math.max(180, Math.min(550, startWidth + delta));
+      setSidebarWidth(newWidth);
+    };
+
+    const onMouseUp = () => {
+      setIsResizing(false);
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      try {
+        localStorage.setItem('fontier_sidebar_width', sidebarWidth.toString());
+      } catch {}
+    };
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  };
 
   // Close color picker and context menu on outside click
   useEffect(() => {
@@ -126,12 +181,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <aside
-      className={`border-r flex select-none shrink-0 h-full transition-[width] duration-150 overflow-hidden relative ${
+      style={{ width: isNavOpen ? `${sidebarWidth + 44}px` : '44px' }}
+      className={`border-r flex select-none shrink-0 h-full overflow-hidden relative ${
         isLight
           ? 'bg-[#ffffff] border-[#e2e8f0] text-[#334155]'
           : 'bg-[#181818] border-[#262626] text-[#c8c8c8]'
-      } ${isNavOpen ? 'w-64' : 'w-11'}`}
+      }`}
     >
+
       {/* Mini leftmost icon rail */}
       <div
         className={`w-11 border-r flex flex-col items-center py-2.5 space-y-3.5 shrink-0 z-10 ${
@@ -231,12 +288,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </button>
       </div>
 
-      {/* Main navigation list (Fixed width prevents reflow and eliminates scrollbar flicker) */}
+      {/* Main navigation list (Dynamic width with Scaler) */}
       <div
-        className={`w-[212px] shrink-0 flex flex-col justify-between overflow-hidden transition-opacity duration-150 ${
+        style={{ width: `${sidebarWidth}px` }}
+        className={`shrink-0 flex flex-col justify-between overflow-hidden transition-opacity duration-150 ${
           isNavOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
         }`}
       >
+
           <div className="overflow-y-auto px-2 py-3 space-y-4 flex-1 text-xs">
             {/* Primary font filters */}
             <div className="space-y-0.5">
@@ -507,7 +566,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               )}
             </div>
 
-            {/* FOLDERS Section (default gray folder icons) */}
+            {/* FOLDERS Section with Hierarchical Subfolder Tree & Bulk Selection */}
             <div className={`pt-2 border-t relative ${isLight ? 'border-[#e2e8f0]' : 'border-[#242424]'}`}>
               <div
                 className={`flex items-center justify-between py-1 px-1 text-[11px] font-semibold uppercase tracking-wider ${
@@ -529,6 +588,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </button>
 
                 <div className="flex items-center space-x-1">
+                  {/* Toggle Bulk Select Mode Button */}
+                  <button
+                    onClick={() => {
+                      setIsSelectionMode(!isSelectionMode);
+                      if (isSelectionMode) setSelectedFolderIds(new Set());
+                    }}
+                    className={`transition-colors p-0.5 rounded text-[10px] px-1 font-normal ${
+                      isSelectionMode
+                        ? 'bg-blue-600 text-white'
+                        : isLight
+                        ? 'text-[#64748b] hover:text-[#0f172a] hover:bg-slate-200'
+                        : 'text-[#888888] hover:text-white hover:bg-neutral-800'
+                    }`}
+                    title={isSelectionMode ? 'Exit Selection Mode' : 'Bulk Select Folders'}
+                  >
+                    {isSelectionMode ? 'Done' : 'Select'}
+                  </button>
+
                   <button
                     onClick={onOpenLocalFolder}
                     className={`transition-colors p-0.5 ${
@@ -536,10 +613,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         ? 'text-[#64748b] hover:text-[#0284c7]'
                         : 'text-[#888888] hover:text-[#38bdf8]'
                     }`}
-                    title="Watch local font folder"
+                    title="Open local font folder (with subfolders)"
                   >
                     <HardDrive className="w-3.5 h-3.5" />
                   </button>
+
                   <button
                     onClick={() => setShowFolderInput(true)}
                     className={`transition-colors p-0.5 ${
@@ -553,6 +631,65 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   </button>
                 </div>
               </div>
+
+              {/* Bulk Selection Action Bar */}
+              {isSelectionMode && (
+                <div className={`my-1.5 p-2 rounded-md border text-xs space-y-1.5 animate-in fade-in ${
+                  isLight ? 'bg-[#f1f5f9] border-[#cbd5e1]' : 'bg-[#202020] border-[#383838]'
+                }`}>
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-[11px] text-blue-400">
+                      {selectedFolderIds.size} selected
+                    </span>
+                    <button
+                      onClick={() => {
+                        const customIds = folders
+                          .filter((f) => !['pixel', 'serif', 'sans', 'display', 'mono', 'script'].includes(f.id))
+                          .map((f) => f.id);
+                        if (selectedFolderIds.size === customIds.length) {
+                          setSelectedFolderIds(new Set());
+                        } else {
+                          setSelectedFolderIds(new Set(customIds));
+                        }
+                      }}
+                      className="text-[11px] underline hover:text-white text-neutral-400"
+                    >
+                      {selectedFolderIds.size > 0 ? 'Clear All' : 'Select All'}
+                    </button>
+                  </div>
+
+                  {selectedFolderIds.size > 0 && (
+                    <div className="grid grid-cols-2 gap-1 pt-1 border-t border-neutral-700/40">
+                      <button
+                        onClick={() => {
+                          const ids = Array.from(selectedFolderIds);
+                          if (onBulkDeleteFolders) onBulkDeleteFolders(ids, false);
+                          else ids.forEach((id) => onDeleteFolder(id));
+                          setSelectedFolderIds(new Set());
+                          setIsSelectionMode(false);
+                        }}
+                        className="px-1.5 py-1 rounded text-[10px] bg-neutral-700/60 hover:bg-neutral-600 text-white flex items-center justify-center space-x-1"
+                        title="Removes selected folders from Fontier. Files on PC remain untouched!"
+                      >
+                        <Trash2 className="w-3 h-3 text-neutral-300" />
+                        <span>Remove from App</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          const ids = Array.from(selectedFolderIds);
+                          const names = folders.filter((f) => ids.includes(f.id)).map((f) => f.name);
+                          setConfirmDeviceDelete({ folderIds: ids, folderNames: names });
+                        }}
+                        className="px-1.5 py-1 rounded text-[10px] bg-red-600/80 hover:bg-red-600 text-white flex items-center justify-center space-x-1"
+                        title="Deletes folders from computer (moves to Recycle Bin)"
+                      >
+                        <AlertTriangle className="w-3 h-3 text-white" />
+                        <span>Delete from PC</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Inline new folder creation form */}
               {showFolderInput && (
@@ -598,20 +735,33 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </form>
               )}
 
-              {foldersOpen && (
-                <div className="mt-1 space-y-0.5 pl-1">
-                  {folders.map((folder, index) => {
-                    const isSelected = currentFilter === `folder-${folder.id}`;
-                    const count = counts.byFolder[folder.id] || 0;
-                    const folderColor = folder.color || '#888888';
-                    const isSystemFolder = ['pixel', 'serif', 'sans', 'display', 'mono', 'script'].includes(
-                      folder.id
-                    );
+              {/* Hierarchical Folders Tree Rendering */}
+              {foldersOpen && (() => {
+                // Build hierarchical tree: roots and children map
+                const rootFolders = folders.filter((f) => !f.parentId);
+                const childrenMap = new Map<string, FolderItem[]>();
+                folders.forEach((f) => {
+                  if (f.parentId) {
+                    if (!childrenMap.has(f.parentId)) childrenMap.set(f.parentId, []);
+                    childrenMap.get(f.parentId)!.push(f);
+                  }
+                });
 
-                    return (
+                const renderFolder = (folder: FolderItem, depth = 0): React.ReactNode => {
+                  const isSelected = currentFilter === `folder-${folder.id}`;
+                  const children = childrenMap.get(folder.id) || [];
+                  const hasChildren = children.length > 0;
+                  const isCollapsed = collapsedFolderIds.has(folder.id);
+                  const count = counts.byFolder[folder.id] || 0;
+                  const folderColor = folder.color || '#888888';
+                  const isSystemFolder = ['pixel', 'serif', 'sans', 'display', 'mono', 'script'].includes(folder.id);
+                  const isChecked = selectedFolderIds.has(folder.id);
+
+                  return (
+                    <div key={folder.id} className="relative">
                       <div
-                        key={folder.id}
-                        className={`group w-full flex items-center justify-between px-2 py-1.5 rounded text-left transition-colors cursor-pointer relative ${
+                        style={{ paddingLeft: `${Math.max(4, depth * 14 + 4)}px` }}
+                        className={`group w-full flex items-center justify-between py-1.5 pr-1.5 rounded text-left transition-colors cursor-pointer relative select-none ${
                           isSelected
                             ? isLight
                               ? 'bg-[#e2e8f0] text-[#0f172a] font-semibold'
@@ -620,23 +770,87 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             ? 'text-[#475569] hover:bg-[#f1f5f9] hover:text-[#0f172a]'
                             : 'text-[#aaaaaa] hover:bg-[#222222] hover:text-white'
                         }`}
-                        onClick={() => onSelectFilter(`folder-${folder.id}`)}
+                        onClick={() => {
+                          if (isSelectionMode && !isSystemFolder) {
+                            setSelectedFolderIds((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(folder.id)) next.delete(folder.id);
+                              else next.add(folder.id);
+                              return next;
+                            });
+                          } else {
+                            onSelectFilter(`folder-${folder.id}`);
+                          }
+                        }}
                         onContextMenu={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
                           setContextMenu({ x: e.clientX, y: e.clientY, folder });
                         }}
                       >
-                        <div className="flex items-center space-x-2 truncate">
-                          {/* Folder Icon with default gray color */}
+                        <div className="flex items-center space-x-1.5 truncate min-w-0 flex-1">
+                          {/* Bulk Selection Checkbox */}
+                          {isSelectionMode && !isSystemFolder && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedFolderIds((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(folder.id)) next.delete(folder.id);
+                                  else next.add(folder.id);
+                                  return next;
+                                });
+                              }}
+                              className="shrink-0 text-[#3b82f6] p-0.5 hover:opacity-80"
+                            >
+                              {isChecked ? (
+                                <CheckSquare className="w-3.5 h-3.5" />
+                              ) : (
+                                <Square className="w-3.5 h-3.5 text-neutral-500" />
+                              )}
+                            </button>
+                          )}
+
+                          {/* Expand/Collapse Chevron for parents */}
+                          {hasChildren ? (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setCollapsedFolderIds((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(folder.id)) next.delete(folder.id);
+                                  else next.add(folder.id);
+                                  return next;
+                                });
+                              }}
+                              className="shrink-0 p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10 text-neutral-400"
+                              title={isCollapsed ? 'Expand subfolders' : 'Collapse subfolders'}
+                            >
+                              {isCollapsed ? (
+                                <ChevronRight className="w-3 h-3" />
+                              ) : (
+                                <ChevronDown className="w-3 h-3" />
+                              )}
+                            </button>
+                          ) : depth > 0 ? (
+                            <span className="w-3 shrink-0" />
+                          ) : null}
+
+                          {/* Folder Icon */}
                           <FolderIcon
                             className="w-3.5 h-3.5 shrink-0 transition-colors"
                             style={{ color: folderColor }}
                           />
-                          <span className="truncate">{folder.name}</span>
+
+                          {/* Folder Name (full room with Scaler) */}
+                          <span className="truncate text-xs" title={folder.name}>
+                            {folder.name}
+                          </span>
                         </div>
 
-                        <div className="flex items-center space-x-1">
+                        <div className="flex items-center space-x-1 shrink-0 ml-1.5">
                           <span
                             className={`text-[10px] font-mono tabular-nums ${
                               isLight ? 'text-[#94a3b8]' : 'text-[#777777]'
@@ -645,37 +859,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             {count}
                           </span>
 
-                          {/* Quick reorder buttons */}
-                          {onMoveFolderUp && index > 0 && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onMoveFolderUp(folder.id);
-                              }}
-                              className={`opacity-0 group-hover:opacity-100 transition-opacity p-0.5 ${
-                                isLight ? 'text-[#94a3b8] hover:text-[#0f172a]' : 'text-[#777777] hover:text-white'
-                              }`}
-                              title="Move folder up"
-                            >
-                              <ArrowUp className="w-2.5 h-2.5" />
-                            </button>
-                          )}
-                          {onMoveFolderDown && index < folders.length - 1 && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onMoveFolderDown(folder.id);
-                              }}
-                              className={`opacity-0 group-hover:opacity-100 transition-opacity p-0.5 ${
-                                isLight ? 'text-[#94a3b8] hover:text-[#0f172a]' : 'text-[#777777] hover:text-white'
-                              }`}
-                              title="Move folder down"
-                            >
-                              <ArrowDown className="w-2.5 h-2.5" />
-                            </button>
-                          )}
-
-                          {/* Color picker trigger for folder */}
+                          {/* Color picker trigger */}
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -710,15 +894,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             </button>
                           )}
 
-                          {/* Option to delete custom folders */}
-                          {!isSystemFolder && (
+                          {/* Quick delete from Fontier (safe) */}
+                          {!isSystemFolder && !isSelectionMode && (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 onDeleteFolder(folder.id);
                               }}
                               className="opacity-0 group-hover:opacity-100 text-[#ef4444] transition-opacity p-0.5"
-                              title="Delete folder"
+                              title="Remove folder from Fontier (leaves files on PC untouched)"
                             >
                               <Trash2 className="w-3 h-3" />
                             </button>
@@ -756,10 +940,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           </div>
                         )}
                       </div>
-                    );
-                  })}
-                </div>
-              )}
+
+                      {/* Render child subfolders indented */}
+                      {hasChildren && !isCollapsed && (
+                        <div className="relative">
+                          <div
+                            style={{ left: `${depth * 14 + 10}px` }}
+                            className="absolute top-0 bottom-1 w-[1px] bg-neutral-700/30 dark:bg-neutral-800 pointer-events-none"
+                          />
+                          {children.map((child) => renderFolder(child, depth + 1))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                };
+
+                return (
+                  <div className="mt-1 space-y-0.5 pl-0.5">
+                    {rootFolders.map((folder) => renderFolder(folder, 0))}
+                  </div>
+                );
+              })()}
             </div>
           </div>
 
@@ -798,6 +999,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </div>
 
+      {/* Resizer Splitter Drag Handle ("Scaler") */}
+      {isNavOpen && (
+        <div
+          onMouseDown={handleMouseDownResize}
+          className={`w-1.5 hover:w-2 shrink-0 cursor-col-resize transition-all group z-30 select-none flex items-center justify-center ${
+            isResizing
+              ? 'bg-[#3b82f6]'
+              : isLight
+              ? 'bg-transparent hover:bg-[#cbd5e1]'
+              : 'bg-transparent hover:bg-[#333333]'
+          }`}
+          title="Drag to scale folder sidebar width"
+        >
+          <div className="w-[1px] h-8 rounded-full bg-neutral-500/40 group-hover:bg-blue-400 group-hover:h-14 transition-all" />
+        </div>
+      )}
+
       {/* Right-click Floating Context Menu for Folders */}
       {contextMenu && (
         <div
@@ -807,7 +1025,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             left: `${contextMenu.x}px`,
             top: `${contextMenu.y}px`,
           }}
-          className={`z-50 w-44 rounded-md shadow-2xl py-1 border text-xs animate-in fade-in zoom-in-95 ${
+          className={`z-50 w-48 rounded-md shadow-2xl py-1 border text-xs animate-in fade-in zoom-in-95 ${
             isLight
               ? 'bg-white border-[#cbd5e1] text-[#0f172a]'
               : 'bg-[#1e1e1e] border-[#383838] text-[#e0e0e0]'
@@ -871,21 +1089,102 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {!['pixel', 'serif', 'sans', 'display', 'mono', 'script'].includes(
             contextMenu.folder.id
           ) && (
-            <button
-              onClick={() => {
-                onDeleteFolder(contextMenu.folder.id);
-                setContextMenu(null);
-              }}
-              className={`w-full flex items-center px-3 py-1.5 space-x-2 text-left text-[#ef4444] hover:bg-[#ef4444] hover:text-white transition-colors border-t mt-1`}
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span>Delete Folder</span>
-            </button>
+            <>
+              <button
+                onClick={() => {
+                  onDeleteFolder(contextMenu.folder.id);
+                  setContextMenu(null);
+                }}
+                className="w-full flex items-center px-3 py-1.5 space-x-2 text-left hover:bg-neutral-700 hover:text-white transition-colors border-t border-neutral-700/50 mt-1"
+                title="Hides this folder from Fontier. Leaves all font files on your computer untouched."
+              >
+                <Trash2 className="w-3.5 h-3.5 text-neutral-400" />
+                <span>Remove from Fontier</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  const targetFolder = contextMenu.folder;
+                  setContextMenu(null);
+                  setConfirmDeviceDelete({
+                    folderIds: [targetFolder.id],
+                    folderNames: [targetFolder.name],
+                  });
+                }}
+                className="w-full flex items-center px-3 py-1.5 space-x-2 text-left text-[#ef4444] hover:bg-[#ef4444] hover:text-white transition-colors"
+                title="Permanently moves this folder and its files to the Recycle Bin"
+              >
+                <AlertTriangle className="w-3.5 h-3.5" />
+                <span>Delete from Device...</span>
+              </button>
+            </>
           )}
+        </div>
+      )}
+
+      {/* Confirmation Modal for Delete from Device (Recycle Bin) */}
+      {confirmDeviceDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 animate-in fade-in">
+          <div
+            className={`w-full max-w-sm rounded-xl p-5 shadow-2xl border ${
+              isLight ? 'bg-white border-[#cbd5e1] text-[#0f172a]' : 'bg-[#1e1e1e] border-[#383838] text-white'
+            }`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center space-x-3 mb-3 text-red-500">
+              <AlertTriangle className="w-6 h-6 shrink-0" />
+              <h3 className="font-semibold text-sm">Delete from Computer (Recycle Bin)?</h3>
+            </div>
+
+            <p className="text-xs text-neutral-400 mb-2 leading-relaxed">
+              This will move the selected folder(s) and their font files from your hard drive directly to the <strong>Recycle Bin</strong>:
+            </p>
+
+            <div className="max-h-24 overflow-y-auto mb-4 p-2 rounded bg-black/20 border border-neutral-800 text-[11px] font-mono text-neutral-300">
+              {confirmDeviceDelete.folderNames.map((name, i) => (
+                <div key={i} className="truncate">• {name}</div>
+              ))}
+            </div>
+
+            <p className="text-[11px] text-neutral-400 mb-4 italic">
+              Tip: If you only want to hide them in Fontier without touching files on your PC, choose &quot;Remove from App&quot;.
+            </p>
+
+            <div className="flex items-center justify-end space-x-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDeviceDelete(null)}
+                className="px-3 py-1.5 rounded text-xs border border-neutral-600 text-neutral-300 hover:bg-neutral-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const ids = confirmDeviceDelete.folderIds;
+                  if (onBulkDeleteFolders) {
+                    onBulkDeleteFolders(ids, true);
+                  } else if (onDeleteFolderFromDisk) {
+                    ids.forEach((id) => onDeleteFolderFromDisk(id));
+                  } else {
+                    ids.forEach((id) => onDeleteFolder(id));
+                  }
+                  setConfirmDeviceDelete(null);
+                  setSelectedFolderIds(new Set());
+                  setIsSelectionMode(false);
+                }}
+                className="px-3 py-1.5 rounded text-xs bg-red-600 hover:bg-red-700 text-white font-medium shadow-sm flex items-center space-x-1"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Move to Recycle Bin</span>
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </aside>
   );
 };
+
 
 

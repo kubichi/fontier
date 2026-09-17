@@ -360,26 +360,81 @@ export default function App() {
   };
 
   // Create new folder
-  const handleCreateFolder = (name: string, color?: string): string => {
+  const handleCreateFolder = (name: string, color?: string, parentId?: string): string => {
     const id = `folder-${Date.now()}`;
-    const newFolder: FolderItem = { id, name, color: color || '#38bdf8' };
+    const newFolder: FolderItem = { id, name, color: color || '#38bdf8', parentId, collapsed: false };
     setFolders((prev) => [...prev, newFolder]);
     return id;
   };
 
-  // Delete folder
+  // Delete folder from App only (leaves PC files completely untouched)
   const handleDeleteFolder = (folderId: string) => {
-    setFolders((prev) => prev.filter((f) => f.id !== folderId));
+    const toDelete = new Set<string>();
+    const collectDescendants = (pId: string) => {
+      toDelete.add(pId);
+      folders.filter((f) => f.parentId === pId).forEach((c) => collectDescendants(c.id));
+    };
+    collectDescendants(folderId);
+
+    setFolders((prev) => prev.filter((f) => !toDelete.has(f.id)));
     setFonts((prev) =>
-      prev.map((f) => (f.folderId === folderId ? { ...f, folderId: undefined } : f))
+      prev.filter((f) => !f.folderId || !toDelete.has(f.folderId))
     );
-    if (currentFilter === `folder-${folderId}`) {
+    if (toDelete.has(currentFilter.replace('folder-', ''))) {
       setCurrentFilter('all');
     }
-    if (watchedFolder?.folderId === folderId) {
+    if (watchedFolder?.folderId && toDelete.has(watchedFolder.folderId)) {
       setWatchedFolder(null);
     }
+    setNotification('Removed folder from Fontier. Files on PC remain untouched.');
+    setTimeout(() => setNotification(null), 3500);
   };
+
+  // Delete folder from Device / Disk (moves to Windows Recycle Bin)
+  const handleDeleteFolderFromDisk = async (folderId: string) => {
+    const folder = folders.find((f) => f.id === folderId);
+    if (folder?.folderPath && typeof (window as any).electronAPI?.deletePathToTrash === 'function') {
+      await (window as any).electronAPI.deletePathToTrash(folder.folderPath);
+    }
+    handleDeleteFolder(folderId);
+    setNotification('Moved folder and files to Recycle Bin.');
+    setTimeout(() => setNotification(null), 3500);
+  };
+
+  // Bulk delete folders
+  const handleBulkDeleteFolders = async (folderIds: string[], deleteFromDisk: boolean) => {
+    if (deleteFromDisk) {
+      for (const id of folderIds) {
+        const folder = folders.find((f) => f.id === id);
+        if (folder?.folderPath && typeof (window as any).electronAPI?.deletePathToTrash === 'function') {
+          await (window as any).electronAPI.deletePathToTrash(folder.folderPath);
+        }
+      }
+    }
+
+    const toDelete = new Set<string>();
+    const collectDescendants = (pId: string) => {
+      toDelete.add(pId);
+      folders.filter((f) => f.parentId === pId).forEach((c) => collectDescendants(c.id));
+    };
+    folderIds.forEach((id) => collectDescendants(id));
+
+    setFolders((prev) => prev.filter((f) => !toDelete.has(f.id)));
+    setFonts((prev) =>
+      prev.filter((f) => !f.folderId || !toDelete.has(f.folderId))
+    );
+    if (toDelete.has(currentFilter.replace('folder-', ''))) {
+      setCurrentFilter('all');
+    }
+
+    if (deleteFromDisk) {
+      setNotification(`Moved ${folderIds.length} folder(s) to Recycle Bin.`);
+    } else {
+      setNotification(`Removed ${folderIds.length} folder(s) from Fontier (files on PC untouched).`);
+    }
+    setTimeout(() => setNotification(null), 3500);
+  };
+
 
   // Recursive directory scanner supporting nested subfolders of any depth
   const collectFilesRecursively = async (dirHandle: any, files: File[]) => {
@@ -401,70 +456,102 @@ export default function App() {
   };
 
   /**
-   * Core subfolder-aware import.
-   * Takes ScannedFontFile[] (each with a relative path like "helvetica/bold/Font.ttf"),
-   * groups them by their immediate subfolder relative to the root, creates one sidebar
-   * Folder entry per unique subfolder, and assigns fonts accordingly.
-   *
-   * rootLabel    = name of the top-level folder the user selected (shown for root-level fonts)
-   * scannedFiles = output of scanDirectoryHandleWithPaths / scanDroppedItems / Electron scan
+   * Core hierarchical subfolder-aware import.
+   * Creates a ROOT parent folder representing the selected folder (e.g. "fonts").
+   * Any subfolders inside it are nested underneath with parentId: rootFolderId.
+   * Streaming file buffers on-demand keeps RAM low!
    */
   const importFontsWithSubfolders = async (
     scannedFiles: ScannedFontFile[],
-    rootLabel: string
+    rootLabel: string,
+    rootFolderPath?: string
   ) => {
     if (scannedFiles.length === 0) return;
     setIsScanning(true);
 
     try {
-      // --- Step 1: group files by the TOP-LEVEL subfolder relative to root ---
-      // "helvetica/bold/Font.ttf" -> key "helvetica"
-      // "Font.ttf"               -> key "" (root)
+      // 1. Group files by subfolder relative path
       const subfolderMap = new Map<string, ScannedFontFile[]>();
 
       for (const entry of scannedFiles) {
-        // Normalise slashes and strip leading slash if any
         const relPath = entry.relativePath.replace(/\\/g, '/').replace(/^\//, '');
         const parts = relPath.split('/');
-        // subfolder key = everything except the filename (joined), then take first segment
-        const subParts = parts.slice(0, -1); // e.g. ["helvetica","bold"] or []
-        const topLevelKey = subParts[0] || ''; // first segment = immediate child folder of root
-        if (!subfolderMap.has(topLevelKey)) subfolderMap.set(topLevelKey, []);
-        subfolderMap.get(topLevelKey)!.push(entry);
+        const subParts = parts.slice(0, -1);
+        const subfolderKey = subParts.join('/'); // full subfolder path e.g. "helvetica"
+        if (!subfolderMap.has(subfolderKey)) subfolderMap.set(subfolderKey, []);
+        subfolderMap.get(subfolderKey)!.push(entry);
       }
 
-      // --- Step 2: create one FolderItem per unique top-level subfolder ---
-      const newFolders: FolderItem[] = [];
-      const folderIdByKey = new Map<string, string>();
+      // 2. Create the ROOT folder (e.g. "fonts")
+      const rootFolderId = `folder-root-${Date.now()}`;
+      const rootFolder: FolderItem = {
+        id: rootFolderId,
+        name: rootLabel,
+        color: '#38bdf8',
+        collapsed: false,
+        folderPath: rootFolderPath,
+      };
+
+      const newFolders: FolderItem[] = [rootFolder];
+      const folderIdByPath = new Map<string, string>();
+      folderIdByPath.set('', rootFolderId);
+
       const FOLDER_COLORS = ['#888888', '#3b82f6', '#22c55e', '#ec4899', '#8b5cf6', '#ef4444', '#06b6d4', '#f97316', '#eab308'];
       let colorIdx = 0;
 
-      for (const key of subfolderMap.keys()) {
-        const folderId = 'folder-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
-        const folderName = key || rootLabel; // empty key = root level → use root folder name
-        newFolders.push({
-          id: folderId,
-          name: folderName,
-          color: FOLDER_COLORS[colorIdx % FOLDER_COLORS.length],
-        });
-        folderIdByKey.set(key, folderId);
-        colorIdx++;
+      // Sort keys by depth so parent folders are created before child folders
+      const sortedKeys = Array.from(subfolderMap.keys())
+        .filter(Boolean)
+        .sort((a, b) => a.split('/').length - b.split('/').length);
+
+      for (const key of sortedKeys) {
+        const parts = key.split('/');
+        let currentPath = '';
+        let currentParentId = rootFolderId;
+
+        for (let i = 0; i < parts.length; i++) {
+          currentPath = currentPath ? `${currentPath}/${parts[i]}` : parts[i];
+          if (!folderIdByPath.has(currentPath)) {
+            const subId = `folder-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+            newFolders.push({
+              id: subId,
+              name: parts[i],
+              parentId: currentParentId, // NESTED UNDER ITS PARENT!
+              color: FOLDER_COLORS[colorIdx % FOLDER_COLORS.length],
+              folderPath: rootFolderPath ? `${rootFolderPath}/${currentPath}` : undefined,
+              collapsed: false,
+            });
+            colorIdx++;
+            folderIdByPath.set(currentPath, subId);
+          }
+          currentParentId = folderIdByPath.get(currentPath)!;
+        }
       }
 
-      // --- Step 3: parse all fonts and assign correct folderId ---
+      // 3. Parse all fonts and assign folderId
       const allParsedFonts: FontItem[] = [];
       const BATCH_SIZE = 25;
       let totalProcessed = 0;
 
       for (const [key, entries] of subfolderMap.entries()) {
-        const targetFolderId = folderIdByKey.get(key)!;
+        const targetFolderId = folderIdByPath.get(key) || rootFolderId;
         for (let i = 0; i < entries.length; i += BATCH_SIZE) {
           const batch = entries.slice(i, i + BATCH_SIZE);
           for (const entry of batch) {
             try {
               const buf = await entry.file.arrayBuffer();
-              const item = await parseFontBuffer(entry.file.name, buf, targetFolderId, entry.file.size);
-              item.filePath = entry.relativePath;
+              const fullDiskPath = entry.fullPath || (entry.file as any).path;
+              // RAM optimization: only first 60 fonts register immediately.
+              // All remaining fonts register lazily on-demand when rendered in viewport!
+              const item = await parseFontBuffer(
+                entry.file.name,
+                buf,
+                targetFolderId,
+                entry.file.size,
+                fullDiskPath,
+                totalProcessed >= 60
+              );
+              item.filePath = fullDiskPath || entry.relativePath;
               allParsedFonts.push(item);
             } catch (err) {
               console.warn('Could not parse font ' + entry.file.name + ':', err);
@@ -481,20 +568,18 @@ export default function App() {
       if (allParsedFonts.length > 0) {
         setFolders((prev) => [...prev, ...newFolders]);
         setFonts((prev) => {
-          // Remove stale Local fonts with same names (re-import scenario)
           const incomingNames = new Set(allParsedFonts.map((f) => f.name.toLowerCase()));
           const filtered = prev.filter((f) => !(f.provider === 'Local' && incomingNames.has(f.name.toLowerCase())));
           return [...allParsedFonts, ...filtered];
         });
-        const firstFolderId = newFolders[0]?.id;
-        if (firstFolderId) setCurrentFilter('folder-' + firstFolderId);
+        setCurrentFilter('folder-' + rootFolderId);
         setSelectedFontForInspector(allParsedFonts[0]);
         setShowInspector(true);
-        const folderCount = newFolders.length;
+        const subfolderCount = newFolders.length - 1;
         setNotification(
           'Imported ' + allParsedFonts.length + ' font' + (allParsedFonts.length === 1 ? '' : 's') +
-          ' into ' + folderCount + ' folder' + (folderCount === 1 ? '' : 's') +
-          ' from "' + rootLabel + '"'
+          ' into "' + rootLabel + '"' +
+          (subfolderCount > 0 ? ' (' + subfolderCount + ' subfolders)' : '')
         );
         setTimeout(() => setNotification(null), 5000);
       } else {
@@ -509,6 +594,7 @@ export default function App() {
       setIsScanning(false);
     }
   };
+
 
 
   // Process a list of File objects into real FontItems using opentype.js
@@ -624,22 +710,34 @@ export default function App() {
           const rootLabel = res.folderName || 'Local Fonts';
           const rootPath = (res.folderPath || '').replace(/\\/g, '/').replace(/\/$/, '');
 
-          // Convert Electron file list to ScannedFontFile[] using the full path info
+          // Convert Electron file list to ScannedFontFile[] with on-demand streaming
           const scanned: ScannedFontFile[] = res.files.map((f: any) => {
             const absPath = (f.path || f.name).replace(/\\/g, '/');
-            // Compute path relative to the selected root folder
-            let relPath = absPath.startsWith(rootPath)
-              ? absPath.slice(rootPath.length).replace(/^\//, '')
-              : f.name;
+            let relPath = f.relativePath || (
+              absPath.startsWith(rootPath)
+                ? absPath.slice(rootPath.length).replace(/^\//, '')
+                : f.name
+            );
             return {
-              // Wrap buffer back into a File-like object; parseFontBuffer will arrayBuffer() it
-              file: new File([f.buffer], f.name, { type: 'font/truetype' }),
+              file: {
+                name: f.name,
+                size: f.size,
+                path: f.path,
+                arrayBuffer: async () => {
+                  if (typeof (window as any).electronAPI?.readFontFile === 'function') {
+                    return await (window as any).electronAPI.readFontFile(f.path);
+                  }
+                  return new ArrayBuffer(0);
+                },
+              },
               relativePath: relPath,
+              fullPath: f.path,
             };
           });
 
-          await importFontsWithSubfolders(scanned, rootLabel);
+          await importFontsWithSubfolders(scanned, rootLabel, res.folderPath);
           return;
+
         }
       } catch (err) {
         console.warn('Electron folder selection error:', err);
@@ -858,6 +956,27 @@ export default function App() {
       }
     }
 
+    // Recursively aggregate child folder counts into parent folders
+    const childrenMap = new Map<string, string[]>();
+    for (const f of folders) {
+      if (f.parentId) {
+        if (!childrenMap.has(f.parentId)) childrenMap.set(f.parentId, []);
+        childrenMap.get(f.parentId)!.push(f.id);
+      }
+    }
+    const getDeepCount = (fId: string): number => {
+      let total = byFolder[fId] || 0;
+      const children = childrenMap.get(fId) || [];
+      for (const cId of children) {
+        total += getDeepCount(cId);
+      }
+      return total;
+    };
+    const aggregatedByFolder: Record<string, number> = {};
+    for (const folder of folders) {
+      aggregatedByFolder[folder.id] = getDeepCount(folder.id);
+    }
+
     return {
       all: fonts.length,
       recent: Math.min(fonts.length, 8),
@@ -867,7 +986,7 @@ export default function App() {
       google,
       local,
       system,
-      byFolder,
+      byFolder: aggregatedByFolder,
     };
   }, [fonts, folders]);
 
@@ -882,6 +1001,16 @@ export default function App() {
     const isRecent = currentFilter === 'recent';
     const isFolder = currentFilter.startsWith('folder-');
     const folderId = isFolder ? currentFilter.replace('folder-', '') : '';
+
+    // Collect all descendant folder IDs so selecting parent shows child fonts too!
+    const folderFilterIds = new Set<string>();
+    if (isFolder) {
+      const collectDescendants = (id: string) => {
+        folderFilterIds.add(id);
+        folders.filter((f) => f.parentId === id).forEach((c) => collectDescendants(c.id));
+      };
+      collectDescendants(folderId);
+    }
 
     const list: FontItem[] = [];
     const maxRecent = 12;
@@ -907,8 +1036,9 @@ export default function App() {
       } else if (currentFilter === 'provider-system') {
         if (f.provider !== 'System') continue;
       } else if (isFolder) {
-        if (f.folderId !== folderId) continue;
+        if (!f.folderId || !folderFilterIds.has(f.folderId)) continue;
       }
+
 
       // 2. Status filter
       if (filters.status === 'active') {
@@ -1073,7 +1203,10 @@ export default function App() {
           folders={folders}
           onCreateFolder={handleCreateFolder}
           onDeleteFolder={handleDeleteFolder}
+          onDeleteFolderFromDisk={handleDeleteFolderFromDisk}
+          onBulkDeleteFolders={handleBulkDeleteFolders}
           onChangeFolderColor={handleChangeFolderColor}
+
           onMoveFolderUp={handleMoveFolderUp}
           onMoveFolderDown={handleMoveFolderDown}
           onRescanFolder={handleRescanFolder}

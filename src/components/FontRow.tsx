@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Heart, ChevronRight, Check, Info } from 'lucide-react';
 import { FontItem, TextAlignment, ViewMode } from '../types';
+import { ensureFontLoaded } from '../utils/fontStorage';
 
 interface FontRowProps {
   font: FontItem;
@@ -35,6 +36,13 @@ export const FontRow: React.FC<FontRowProps> = React.memo(({
   onOpenDetail,
   theme = 'dark',
 }) => {
+  // Lazy-load font face into Chromium font cache ONLY when this row is in viewport
+  useEffect(() => {
+    if (font.provider === 'Local') {
+      ensureFontLoaded(font);
+    }
+  }, [font.id, font.fontFamily, font.filePath, font.provider]);
+
   const isLight = theme === 'light';
   const alignClass =
     alignment === 'center'
@@ -42,6 +50,7 @@ export const FontRow: React.FC<FontRowProps> = React.memo(({
       : alignment === 'right'
       ? 'text-right'
       : 'text-left';
+
 
   if (viewMode === 'grid') {
     return (

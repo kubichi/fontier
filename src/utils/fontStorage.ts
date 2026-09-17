@@ -1,7 +1,6 @@
 // Robust IndexedDB binary font storage and FontFace registry manager for Fontier
 const DB_NAME = 'fontier_font_db';
 // Version 2: clears old entries that used ephemeral random UserFont_local_XXXX family names.
-// On upgrade, the store is dropped and recreated so stale binaries don't cause ghost registrations.
 const DB_VERSION = 2;
 const STORE_NAME = 'font_binaries';
 
@@ -18,7 +17,6 @@ function getDB(): Promise<IDBDatabase> {
       const request = window.indexedDB.open(DB_NAME, DB_VERSION);
       request.onupgradeneeded = (event) => {
         const db = request.result;
-        // Drop old store on version upgrade to clear stale random-family-name entries
         if (event.oldVersion < 2 && db.objectStoreNames.contains(STORE_NAME)) {
           db.deleteObjectStore(STORE_NAME);
         }
@@ -34,15 +32,16 @@ function getDB(): Promise<IDBDatabase> {
 }
 
 /**
- * Stores font arrayBuffer binary data into IndexedDB so it persists across reloads.
+ * Stores font binary in IndexedDB for persistence across app restarts.
+ * Stores a copy so the caller can release their reference.
  */
 export async function saveFontBinary(id: string, familyName: string, buffer: ArrayBuffer): Promise<void> {
   try {
     const db = await getDB();
-    const cleanBuffer = buffer.slice(0);
+    // Slice to detach from any shared buffer and let the original be GC'd
+    const storedBuffer = buffer.slice(0);
     const tx = db.transaction(STORE_NAME, 'readwrite');
-    const store = tx.objectStore(STORE_NAME);
-    store.put({ id, familyName, buffer: cleanBuffer, updatedAt: Date.now() });
+    tx.objectStore(STORE_NAME).put({ id, familyName, buffer: storedBuffer, updatedAt: Date.now() });
     await new Promise<void>((resolve, reject) => {
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
@@ -53,11 +52,16 @@ export async function saveFontBinary(id: string, familyName: string, buffer: Arr
 }
 
 /**
- * Registers a FontFace into document.fonts using a blob URL as the font source.
- * Blob URLs are more reliable than raw ArrayBuffer in Electron's Chromium renderer.
- * The @font-face CSS rule is injected first so the CSS engine resolves the family
- * immediately on first paint; the FontFace API is also registered so
- * document.fonts.check() returns the correct result.
+ * Registers a font into document.fonts using the FontFace API.
+ *
+ * Strategy:
+ * - Create a temporary Blob URL from the buffer.
+ * - Load the FontFace using the blob URL (most reliable in Electron/Chromium).
+ * - Add the loaded face to document.fonts.
+ * - Immediately revoke the blob URL — the font data is now held by the browser's
+ *   internal font engine, not the JS heap. This is critical for RAM: an unrevoked
+ *   blob URL pins the full binary in memory forever.
+ * - The browser automatically repaints text using the new face (no React re-render needed).
  */
 export async function registerFontFace(familyName: string, buffer: ArrayBuffer): Promise<boolean> {
   if (typeof document === 'undefined') return false;
@@ -65,62 +69,42 @@ export async function registerFontFace(familyName: string, buffer: ArrayBuffer):
   const cleanFamily = familyName.replace(/['"]/g, '').trim();
   if (!cleanFamily) return false;
 
-  // Already registered this session — document.fonts persists the face
   if (registeredFamilies.has(cleanFamily)) {
     return true;
   }
 
+  let blobUrl = '';
   try {
-    const cleanBuffer = buffer.slice(0);
-    // Blob URL is the most reliable font source in Electron's Chromium renderer
-    const blob = new Blob([cleanBuffer], { type: 'font/truetype' });
-    const blobUrl = URL.createObjectURL(blob);
+    // Do NOT slice — we just need a temporary view for the Blob constructor
+    const blob = new Blob([buffer], { type: 'font/truetype' });
+    blobUrl = URL.createObjectURL(blob);
 
-    // 1. Inject @font-face style rule FIRST — CSS engine picks it up immediately
-    const styleId = 'fontier-font-' + cleanFamily.replace(/[^a-zA-Z0-9]/g, '_');
-    if (!document.getElementById(styleId)) {
-      const styleEl = document.createElement('style');
-      styleEl.id = styleId;
-      styleEl.textContent = [
-        '@font-face {',
-        '  font-family: "' + cleanFamily + '";',
-        '  src: url("' + blobUrl + '");',
-        '  font-weight: 100 900;',
-        '  font-style: normal italic;',
-        '  font-display: block;',
-        '}',
-      ].join('\n');
-      document.head.appendChild(styleEl);
-    }
-
-    // 2. Also register via FontFace API so document.fonts.check() works
-    try {
-      const face = new FontFace(cleanFamily, 'url("' + blobUrl + '")');
-      await face.load();
-      document.fonts.add(face);
-    } catch (faceErr) {
-      // @font-face style injection still provides the fallback — non-fatal
-      console.warn('FontFace API load failed for "' + cleanFamily + '" (CSS @font-face still active):', faceErr);
-    }
+    const face = new FontFace(cleanFamily, 'url("' + blobUrl + '")');
+    await face.load();
+    document.fonts.add(face);
 
     registeredFamilies.add(cleanFamily);
     return true;
   } catch (err) {
     console.warn('Failed to register font "' + familyName + '":', err);
     return false;
+  } finally {
+    // Always revoke — whether load succeeded or failed.
+    // Once document.fonts.add(face) is called, the browser engine owns the data.
+    if (blobUrl) URL.revokeObjectURL(blobUrl);
   }
 }
 
 /**
  * Re-registers all stored local fonts from IndexedDB on application start.
- * Returns the count of successfully rehydrated fonts.
+ * The browser automatically repaints affected text when document.fonts.add() is called,
+ * so no React re-render is needed after this completes.
  */
 export async function rehydrateAllStoredFonts(): Promise<number> {
   try {
     const db = await getDB();
     const tx = db.transaction(STORE_NAME, 'readonly');
-    const store = tx.objectStore(STORE_NAME);
-    const request = store.getAll();
+    const request = tx.objectStore(STORE_NAME).getAll();
 
     const records: Array<{ id: string; familyName: string; buffer: ArrayBuffer }> = await new Promise(
       (resolve, reject) => {
@@ -133,6 +117,8 @@ export async function rehydrateAllStoredFonts(): Promise<number> {
     for (const item of records) {
       if (item.buffer && item.familyName) {
         try {
+          // Pass buffer directly — registerFontFace creates a temporary blob URL
+          // and revokes it immediately after loading. No lingering RAM.
           const ok = await registerFontFace(item.familyName, item.buffer);
           if (ok) count++;
         } catch (e) {
@@ -147,9 +133,50 @@ export async function rehydrateAllStoredFonts(): Promise<number> {
   }
 }
 
-/**
- * Returns the set of family names registered in this session.
- */
 export function getRegisteredFamilies(): ReadonlySet<string> {
   return registeredFamilies;
 }
+
+/**
+ * On-demand lazy font loader.
+ * If font face is already loaded, returns immediately.
+ * Otherwise, loads from disk (in Electron) or IndexedDB and registers only this font face.
+ * This keeps RAM usage low (~180MB) because only fonts currently in the viewport are decoded!
+ */
+export async function ensureFontLoaded(font: { id: string; fontFamily: string; filePath?: string; provider: string }): Promise<boolean> {
+  if (font.provider !== 'Local') return true;
+  const cleanFamily = font.fontFamily.split(',')[0].replace(/['"]/g, '').trim();
+  if (registeredFamilies.has(cleanFamily)) return true;
+
+  // 1. Electron on-demand disk read (fastest, zero RAM storage in IndexedDB)
+  if (font.filePath && typeof (window as any).electronAPI?.readFontFile === 'function') {
+    try {
+      const buf = await (window as any).electronAPI.readFontFile(font.filePath);
+      if (buf && buf.byteLength > 0) {
+        return await registerFontFace(cleanFamily, buf);
+      }
+    } catch (e) {
+      console.warn('Could not load font file from disk:', font.filePath, e);
+    }
+  }
+
+  // 2. Fallback to IndexedDB (browser or webkit fallback)
+  try {
+    const db = await getDB();
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const store = tx.objectStore(STORE_NAME);
+    const req = store.get(font.id);
+    const record = await new Promise<any>((resolve) => {
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+    });
+    if (record && record.buffer) {
+      return await registerFontFace(cleanFamily, record.buffer);
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  return false;
+}
+

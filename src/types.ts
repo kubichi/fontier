@@ -59,7 +59,9 @@ export interface FolderItem {
   count?: number;
   icon?: string;
   color?: string;
+  folderPath?: string; // Full physical disk path for local folders
 }
+
 
 export interface FontFilters {
   category: string;

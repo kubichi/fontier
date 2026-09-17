@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, session, nativeTheme } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, session, nativeTheme, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -17,24 +17,21 @@ function createWindow() {
     height: 850,
     minWidth: 960,
     minHeight: 640,
-    frame: false, // Disables native Windows title bar so only Fontier's custom title bar is shown!
-    titleBarStyle: 'hidden',
+    frame: process.platform === 'linux' ? true : false, // Native GTK window frame on Linux!
+    titleBarStyle: process.platform === 'linux' ? 'default' : 'hidden',
     backgroundColor: '#161616',
     icon: path.join(__dirname, '../public', iconFile),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
-      nodeIntegration: false,
       contextIsolation: true,
-      webSecurity: true,
-      scrollBounce: false,
+      nodeIntegration: false,
+      webSecurity: false, // Allow local font file access and blob font loading
+      sandbox: false,
     },
   });
 
-  // Handle window controls invoked from Fontier's in-app TitleBar
-  ipcMain.on('window-minimize', () => {
-    mainWindow.minimize();
-  });
-
+  // Window control IPC handlers
+  ipcMain.on('window-minimize', () => mainWindow.minimize());
   ipcMain.on('window-maximize', () => {
     if (mainWindow.isMaximized()) {
       mainWindow.unmaximize();
@@ -42,12 +39,9 @@ function createWindow() {
       mainWindow.maximize();
     }
   });
+  ipcMain.on('window-close', () => mainWindow.close());
 
-  ipcMain.on('window-close', () => {
-    mainWindow.close();
-  });
-
-  // Native folder selection dialog with recursive subfolder traversal
+  // Native folder selection dialog with recursive subfolder traversal (RAM-optimized: paths & stats only)
   ipcMain.handle('select-directory', async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
       properties: ['openDirectory'],
@@ -73,15 +67,16 @@ function createWindow() {
             if (['.ttf', '.otf', '.woff', '.woff2', '.ttc'].includes(ext)) {
               try {
                 const stats = await fs.promises.stat(fullPath);
-                const fileBuf = await fs.promises.readFile(fullPath);
+                // Compute relative path from root selected folder e.g. "helvetica/bold/Font.ttf"
+                const relPath = path.relative(folderPath, fullPath).replace(/\\/g, '/');
                 fontFiles.push({
                   name: entry.name,
                   path: fullPath,
+                  relativePath: relPath,
                   size: stats.size,
-                  buffer: fileBuf.buffer.slice(fileBuf.byteOffset, fileBuf.byteOffset + fileBuf.byteLength),
                 });
               } catch (e) {
-                console.warn('Could not read file binary:', fullPath, e);
+                console.warn('Could not stat font file:', fullPath, e);
               }
             }
           }
@@ -98,6 +93,30 @@ function createWindow() {
       folderName,
       files,
     };
+  });
+
+  // On-demand font file buffer reader (keeps RAM low by reading only when requested)
+  ipcMain.handle('read-font-file', async (event, filePath) => {
+    try {
+      if (!filePath || typeof filePath !== 'string') return null;
+      const fileBuf = await fs.promises.readFile(filePath);
+      return fileBuf.buffer.slice(fileBuf.byteOffset, fileBuf.byteOffset + fileBuf.byteLength);
+    } catch (err) {
+      console.warn('Could not read font file:', filePath, err);
+      return null;
+    }
+  });
+
+  // Safe delete to OS Trash/Recycle Bin (works on Windows Recycle Bin, macOS Trash, Linux freedesktop trash)
+  ipcMain.handle('delete-path-to-trash', async (event, targetPath) => {
+    try {
+      if (!targetPath || typeof targetPath !== 'string') return false;
+      await shell.trashItem(targetPath);
+      return true;
+    } catch (err) {
+      console.warn('Could not trash path:', targetPath, err);
+      return false;
+    }
   });
 
   // App Version IPC handler

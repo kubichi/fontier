@@ -49,10 +49,12 @@ export async function parseFontBuffer(
   fileName: string,
   buffer: ArrayBuffer,
   folderId?: string,
-  fileSize?: number
+  fileSize?: number,
+  filePath?: string,
+  skipImmediateRegister?: boolean
 ): Promise<FontItem> {
   const ext = (fileName.split('.').pop()?.toUpperCase() || 'TTF') as FontFormat;
-  const arrayBuffer = buffer.slice(0);
+  const arrayBuffer = buffer;
 
   const fileBaseName = fileName.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
   let fontName = fileBaseName;
@@ -69,7 +71,7 @@ export async function parseFontBuffer(
   let subfamily = 'Regular';
 
   try {
-    const parsedFont = opentype.parse(arrayBuffer.slice(0));
+    const parsedFont = opentype.parse(arrayBuffer);
     if (parsedFont && parsedFont.names) {
       const familyName = extractString(parsedFont.names.fontFamily);
       const fullName = extractString(parsedFont.names.fullName);
@@ -114,30 +116,26 @@ export async function parseFontBuffer(
 
   category = autoTagResult.suggestedCategory || category;
 
-  // Use the ACTUAL font family name as the CSS font-family identifier.
-  // This ensures CSS references remain stable across app restarts and rehydration
-  // from IndexedDB will always produce the correct family name. The font family
-  // from the OpenType 'name' table is exactly what browsers use when a font is
-  // installed system-wide, so it's guaranteed to be a valid CSS identifier.
   const safeFontFamily = buildSafeFamilyName(familyGroup || fontName);
-
-  // Unique storage key per file (timestamp + filename hash) to allow multiple
-  // files of the same family (e.g. Regular + Bold) to each persist their binary.
   const storageId = 'local-' + Date.now() + '-' + fileName.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 32);
 
+  // Register FontFace only if not skipped (keeps RAM low by only loading visible fonts)
+  if (!skipImmediateRegister) {
+    await registerFontFace(safeFontFamily, arrayBuffer);
+  }
 
-  // Register FontFace in browser immediately (blob URL approach)
-  await registerFontFace(safeFontFamily, arrayBuffer.slice(0));
-
-  // Persist font binary into IndexedDB so it survives app restarts
-  saveFontBinary(storageId, safeFontFamily, arrayBuffer.slice(0)).catch((e) => {
-    console.warn('Could not save font to IndexedDB:', e);
-  });
+  // Only persist to IndexedDB if we do not have a local physical filePath to read on demand
+  if (!filePath && typeof window !== 'undefined' && !((window as any).electronAPI?.readFontFile)) {
+    saveFontBinary(storageId, safeFontFamily, arrayBuffer).catch((e) => {
+      console.warn('Could not save font to IndexedDB:', e);
+    });
+  }
 
   return {
     id: storageId,
     name: fontName,
     fontFamily: '"' + safeFontFamily + '", sans-serif',
+
     format: ext,
     category,
     familyGroup,

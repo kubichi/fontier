@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Universal Directory and File Scanner for Fontier
  * Handles deep recursive traversal for:
  * 1. Native File System Access API (showDirectoryPicker)
@@ -14,10 +14,12 @@ export function isFontFileName(fileName: string): boolean {
 }
 
 export interface ScannedFontFile {
-  file: File;
+  file: File | { name: string; size: number; path?: string; arrayBuffer: () => Promise<ArrayBuffer> };
   /** Relative path from the scanned root, e.g. "helvetica/bold/HelveticaBold.ttf" */
   relativePath: string;
+  fullPath?: string;
 }
+
 
 /**
  * Recursively scans FileSystemDirectoryHandle (File System Access API).
