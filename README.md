@@ -9,7 +9,7 @@
 
 ## Features
 
-- **Performance isn't as bad as other electron apps. i think.**
+- **Performance İsn't As Bad As Other Electron Apps. I think.**
   - Virtual windowed rendering renders only visible fonts in the viewport.
   - On-demand lazy font decoding keeps memory usage low (~180MB RAM) even with massive font collections.
 - **Hierarchical Subfolder Tree**
