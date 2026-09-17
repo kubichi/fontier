@@ -8,6 +8,7 @@ if (process.platform === 'win32') {
   app.setAppUserModelId('com.fontier.app');
   app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
 }
+app.commandLine.appendSwitch('js-flags', '--max-old-space-size=512');
 
 function createWindow() {
   const isWin = process.platform === 'win32';

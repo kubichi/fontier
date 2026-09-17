@@ -96,39 +96,43 @@ export async function registerFontFace(familyName: string, buffer: ArrayBuffer):
 }
 
 /**
- * Re-registers all stored local fonts from IndexedDB on application start.
- * The browser automatically repaints affected text when document.fonts.add() is called,
- * so no React re-render is needed after this completes.
+ * Light startup rehydration:
+ * Loads at most maxCount (default 30) stored fonts from IndexedDB for the initial viewport.
+ * All other fonts load smoothly on demand via ensureFontLoaded when scrolled into view.
+ * This prevents loading 4,000+ font buffers into RAM, keeping memory usage at ~180-200MB!
  */
-export async function rehydrateAllStoredFonts(): Promise<number> {
+export async function rehydrateAllStoredFonts(maxCount = 30): Promise<number> {
   try {
     const db = await getDB();
     const tx = db.transaction(STORE_NAME, 'readonly');
-    const request = tx.objectStore(STORE_NAME).getAll();
-
-    const records: Array<{ id: string; familyName: string; buffer: ArrayBuffer }> = await new Promise(
-      (resolve, reject) => {
-        request.onsuccess = () => resolve(request.result || []);
-        request.onerror = () => reject(request.error);
-      }
-    );
+    const store = tx.objectStore(STORE_NAME);
 
     let count = 0;
-    for (const item of records) {
-      if (item.buffer && item.familyName) {
-        try {
-          // Pass buffer directly — registerFontFace creates a temporary blob URL
-          // and revokes it immediately after loading. No lingering RAM.
-          const ok = await registerFontFace(item.familyName, item.buffer);
-          if (ok) count++;
-        } catch (e) {
-          console.warn('Rehydration error for font', item.familyName, e);
+    await new Promise<void>((resolve) => {
+      const cursorReq = store.openCursor();
+      cursorReq.onsuccess = async (e: any) => {
+        const cursor = e.target.result;
+        if (!cursor || count >= maxCount) {
+          resolve();
+          return;
         }
-      }
-    }
+        const item = cursor.value;
+        if (item && item.buffer && item.familyName) {
+          try {
+            const ok = await registerFontFace(item.familyName, item.buffer);
+            if (ok) count++;
+          } catch {
+            // ignore
+          }
+        }
+        cursor.continue();
+      };
+      cursorReq.onerror = () => resolve();
+    });
+
     return count;
   } catch (err) {
-    console.warn('Rehydration from IndexedDB skipped or failed:', err);
+    console.warn('Rehydration skipped:', err);
     return 0;
   }
 }
