@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Moon, Sun, RotateCcw, Check, Sparkles, Download, RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react';
+import { X, Moon, Sun, RotateCcw, Check, Sparkles } from 'lucide-react';
 import { AppSettings } from '../types';
 
 interface SettingsModalProps {
@@ -8,14 +8,6 @@ interface SettingsModalProps {
   settings: AppSettings;
   onUpdateSettings: (newSettings: Partial<AppSettings>) => void;
   onResetAllData: () => void;
-}
-
-interface UpdateState {
-  status: 'idle' | 'checking' | 'available' | 'up-to-date' | 'downloading' | 'downloaded' | 'error' | 'dev-mode';
-  version?: string;
-  percent?: number;
-  error?: string;
-  message?: string;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -27,55 +19,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 }) => {
   const [confirmReset, setConfirmReset] = useState(false);
   const [appVersion, setAppVersion] = useState<string>('1.0.0');
-  const [updateState, setUpdateState] = useState<UpdateState>({ status: 'idle' });
 
   useEffect(() => {
     if (typeof window !== 'undefined' && (window as any).electronAPI) {
       (window as any).electronAPI.getAppVersion?.().then((ver: string) => {
         if (ver) setAppVersion(ver);
       }).catch(() => {});
-
-      const unsubscribe = (window as any).electronAPI.onUpdaterStatus?.((data: UpdateState) => {
-        setUpdateState(data);
-      });
-
-      return () => {
-        if (typeof unsubscribe === 'function') unsubscribe();
-      };
     }
   }, []);
-
-  const handleCheckForUpdates = async () => {
-    if (typeof window !== 'undefined' && (window as any).electronAPI?.checkForUpdates) {
-      setUpdateState({ status: 'checking' });
-      try {
-        const res = await (window as any).electronAPI.checkForUpdates();
-        if (res?.status === 'dev-mode') {
-          setUpdateState({
-            status: 'dev-mode',
-            message: 'In packaged builds, updates sync automatically with GitHub Releases.',
-          });
-        }
-      } catch (err: any) {
-        setUpdateState({ status: 'error', error: err?.message || 'Check failed' });
-      }
-    } else {
-      setUpdateState({ status: 'checking' });
-      setTimeout(() => {
-        setUpdateState({
-          status: 'up-to-date',
-          version: appVersion,
-          message: 'Fontier is currently up to date (v1.0.0).',
-        });
-      }, 1000);
-    }
-  };
-
-  const handleRestartAndInstall = () => {
-    if (typeof window !== 'undefined' && (window as any).electronAPI?.restartAndInstallUpdate) {
-      (window as any).electronAPI.restartAndInstallUpdate();
-    }
-  };
 
   if (!isOpen) return null;
 
@@ -300,103 +251,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </button>
           </div>
 
-          {/* Software Updates (GitHub Releases Auto-Updater) */}
+          {/* About & Version */}
           <div
-            className={`pt-3 border-t space-y-2.5 ${
+            className={`pt-2.5 border-t flex items-center justify-between ${
               isLight ? 'border-[#e2e8f0]' : 'border-[#292929]'
             }`}
           >
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="flex items-center space-x-1.5">
-                  <span className={`text-xs font-semibold ${isLight ? 'text-[#0f172a]' : 'text-white'}`}>
-                    Fontier v{appVersion}
-                  </span>
-                  <span className="px-1.5 py-0.2 rounded text-[10px] font-mono bg-[#16a34a]/15 text-[#16a34a] border border-[#16a34a]/30">
-                    GitHub Release
-                  </span>
-                </div>
-                <span className={`text-[10px] ${isLight ? 'text-[#64748b]' : 'text-[#777777]'}`}>
-                  Automatic background updates via GitHub Releases
-                </span>
-              </div>
-
-              {updateState.status === 'downloaded' ? (
-                <button
-                  type="button"
-                  onClick={handleRestartAndInstall}
-                  className="px-3 py-1.5 text-xs bg-[#16a34a] hover:bg-[#15803d] text-white font-medium rounded transition-colors flex items-center space-x-1.5 shadow-xs animate-pulse"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Restart to Update</span>
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={handleCheckForUpdates}
-                  disabled={updateState.status === 'checking' || updateState.status === 'downloading'}
-                  className={`px-2.5 py-1.5 text-xs rounded border transition-colors flex items-center space-x-1.5 ${
-                    isLight
-                      ? 'bg-[#f8fafc] hover:bg-[#f1f5f9] text-[#0f172a] border-[#cbd5e1]'
-                      : 'bg-[#252525] hover:bg-[#2e2e2e] text-white border-[#383838]'
-                  } disabled:opacity-50`}
-                >
-                  <RefreshCw
-                    className={`w-3 h-3 ${updateState.status === 'checking' ? 'animate-spin' : ''}`}
-                  />
-                  <span>
-                    {updateState.status === 'checking'
-                      ? 'Checking...'
-                      : updateState.status === 'downloading'
-                      ? `Downloading ${updateState.percent || 0}%`
-                      : 'Check for Updates'}
-                  </span>
-                </button>
-              )}
+            <div>
+              <span className={`text-xs font-semibold ${isLight ? 'text-[#0f172a]' : 'text-white'}`}>
+                Fontier
+              </span>
+              <span className={`block text-[10px] ${isLight ? 'text-[#64748b]' : 'text-[#777777]'}`}>
+                Modern Typography and Font Manager
+              </span>
             </div>
-
-            {/* Status Feedback Banner */}
-            {updateState.status === 'up-to-date' && (
-              <div className="p-2 rounded bg-emerald-950/20 border border-emerald-800/40 text-emerald-400 flex items-center space-x-1.5 text-[11px]">
-                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                <span>Fontier is up to date. You have the latest version.</span>
-              </div>
-            )}
-
-            {updateState.status === 'downloading' && (
-              <div className="space-y-1.5 p-2 rounded bg-[#1e293b] border border-[#38bdf8]/30">
-                <div className="flex justify-between text-[10px] text-[#93c5fd]">
-                  <span>Downloading new release...</span>
-                  <span>{updateState.percent || 0}%</span>
-                </div>
-                <div className="w-full bg-[#0f172a] h-1.5 rounded-full overflow-hidden">
-                  <div
-                    className="bg-[#38bdf8] h-full transition-all duration-200"
-                    style={{ width: `${updateState.percent || 0}%` }}
-                  />
-                </div>
-              </div>
-            )}
-
-            {updateState.status === 'downloaded' && (
-              <div className="p-2 rounded bg-emerald-950/40 border border-emerald-600 text-emerald-300 flex items-center space-x-2 text-[11px]">
-                <Sparkles className="w-4 h-4 text-[#4ade80] shrink-0" />
-                <span>New update downloaded! Click &quot;Restart to Update&quot; to apply.</span>
-              </div>
-            )}
-
-            {updateState.status === 'error' && (
-              <div className="p-2 rounded bg-red-950/30 border border-red-800/50 text-red-300 flex items-center space-x-1.5 text-[11px]">
-                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                <span>{updateState.error || 'Could not reach GitHub Releases server.'}</span>
-              </div>
-            )}
-
-            {updateState.status === 'dev-mode' && (
-              <div className="p-2 rounded bg-[#181818] border border-[#2e2e2e] text-[#888888] text-[10px]">
-                {updateState.message}
-              </div>
-            )}
+            <span className="px-2 py-0.5 rounded text-[11px] font-mono bg-white/5 text-[#a0a0a0] border border-white/10">
+              v{appVersion}
+            </span>
           </div>
 
           {/* Reset Action */}

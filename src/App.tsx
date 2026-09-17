@@ -133,21 +133,6 @@ export default function App() {
   const deferredPreviewText = useDeferredValue(previewText);
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const [systemFontProgress, setSystemFontProgress] = useState<{ loaded: number; total: number } | null>(null);
-  const [downloadedUpdate, setDownloadedUpdate] = useState<{ version?: string } | null>(null);
-
-  // Listen for auto-updater events from Electron
-  useEffect(() => {
-    if (typeof window !== 'undefined' && (window as any).electronAPI?.onUpdaterStatus) {
-      const unsub = (window as any).electronAPI.onUpdaterStatus((data: any) => {
-        if (data.status === 'downloaded') {
-          setDownloadedUpdate({ version: data.version });
-        }
-      });
-      return () => {
-        if (typeof unsub === 'function') unsub();
-      };
-    }
-  }, []);
 
   // Auto-detect Windows system fonts progressively without locking UI
   useEffect(() => {
@@ -907,36 +892,6 @@ export default function App() {
           <button
             onClick={() => setNotification(null)}
             className="text-[#94a3b8] hover:text-white ml-2"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      )}
-
-      {/* Auto-Update Downloaded Ready Banner */}
-      {downloadedUpdate && (
-        <div className="absolute top-12 left-1/2 -translate-x-1/2 z-50 bg-[#14532d] border border-[#22c55e] text-white px-4 py-2 rounded-lg shadow-2xl text-xs flex items-center space-x-3 animate-in fade-in duration-200">
-          <div className="flex items-center space-x-2">
-            <span className="w-2 h-2 rounded-full bg-[#4ade80] animate-ping" />
-            <span className="font-semibold">
-              Fontier {downloadedUpdate.version ? `v${downloadedUpdate.version}` : 'Update'} is ready!
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              if (typeof window !== 'undefined' && (window as any).electronAPI?.restartAndInstallUpdate) {
-                (window as any).electronAPI.restartAndInstallUpdate();
-              }
-            }}
-            className="px-2.5 py-1 bg-white hover:bg-[#f0fdf4] text-[#14532d] font-bold rounded shadow-xs transition-colors cursor-pointer"
-          >
-            Restart to Update
-          </button>
-          <button
-            type="button"
-            onClick={() => setDownloadedUpdate(null)}
-            className="text-[#86efac] hover:text-white"
           >
             <X className="w-3.5 h-3.5" />
           </button>
