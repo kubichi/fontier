@@ -77,7 +77,7 @@ The output binaries will be created in the `release/` directory:
 
 ---
 
-## 🛠️ Technology Stack
+## Technology Stack
 
 - **Runtime**: [Electron](https://www.electronjs.org/)
 - **UI Framework**: [React 19](https://react.dev/) + [TypeScript](https://www.typescriptlang.org/)
@@ -90,6 +90,6 @@ The output binaries will be created in the `release/` directory:
 
 ---
 
-## 📄 License
+## License
 
 Licensed under the MIT License. Feel free to use, modify, and distribute.
