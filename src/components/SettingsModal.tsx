@@ -205,6 +205,43 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </button>
           </div>
 
+          {/* Window Chrome Controls Toggle */}
+          <div
+            className={`pt-2 border-t flex items-center justify-between py-1 ${
+              isLight ? 'border-[#e2e8f0]' : 'border-[#292929]'
+            }`}
+          >
+            <div>
+              <span className={`text-xs font-medium block ${isLight ? 'text-[#0f172a]' : 'text-white'}`}>
+                Software-native Window Controls
+              </span>
+              <span className={`text-[10px] ${isLight ? 'text-[#64748b]' : 'text-[#777777]'}`}>
+                Show minimize, maximize and close buttons in the in-app top bar
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() =>
+                onUpdateSettings({
+                  showTitleBarControls: settings.showTitleBarControls === false ? true : false,
+                })
+              }
+              className={`w-9 h-5 rounded-full transition-colors relative p-0.5 ${
+                settings.showTitleBarControls !== false
+                  ? 'bg-[#16a34a]'
+                  : isLight
+                  ? 'bg-[#cbd5e1]'
+                  : 'bg-[#333333]'
+              }`}
+            >
+              <span
+                className={`block w-4 h-4 rounded-full bg-white transition-transform ${
+                  settings.showTitleBarControls !== false ? 'translate-x-4' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+
           {/* Reset Action */}
           <div
             className={`pt-3 border-t flex items-center justify-between ${
@@ -250,12 +287,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </div>
         </div>
 
-        {/* Footer */}
+        {/* Footer & User Attribution */}
         <div
-          className={`px-5 py-3 border-t flex justify-end ${
+          className={`px-5 py-3 border-t flex items-center justify-between ${
             isLight ? 'bg-[#f8fafc] border-[#e2e8f0]' : 'bg-[#181818] border-[#2a2a2a]'
           }`}
         >
+          <div className="text-left select-text">
+            <p className="text-[11px] italic text-[#888888] leading-tight">
+              &ldquo;honestly, I don&apos;t know anymore&rdquo;
+            </p>
+            <p className="text-[10px] font-medium text-[#666666] tracking-tight mt-0.5">
+              vibecoded by Kubichi
+            </p>
+          </div>
+
           <button
             onClick={onClose}
             className={`px-4 py-1.5 text-xs font-medium rounded border transition-colors ${

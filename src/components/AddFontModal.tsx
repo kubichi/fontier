@@ -9,6 +9,7 @@ interface AddFontModalProps {
   onClose: () => void;
   folders: FolderItem[];
   onAddCustomFont: (font: FontItem) => void;
+  onAddCustomFonts?: (fonts: FontItem[]) => void;
   onCreateFolder: (name: string) => string;
 }
 
@@ -17,6 +18,7 @@ export const AddFontModal: React.FC<AddFontModalProps> = ({
   onClose,
   folders,
   onAddCustomFont,
+  onAddCustomFonts,
   onCreateFolder,
 }) => {
   const [activeTab, setActiveTab] = useState<'font' | 'folder'>('font');
@@ -25,10 +27,13 @@ export const AddFontModal: React.FC<AddFontModalProps> = ({
   const [fontName, setFontName] = useState('');
   const [fontCategory, setFontCategory] = useState<FontCategory>('Sans Serif');
   const [detectedTags, setDetectedTags] = useState<string[]>([]);
-  const [file, setFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [processProgress, setProcessProgress] = useState<string>('');
   const [isDragging, setIsDragging] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderModalInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
 
@@ -41,72 +46,112 @@ export const AddFontModal: React.FC<AddFontModalProps> = ({
     setIsDragging(false);
   };
 
-  const processFile = (selectedFile: File) => {
-    const ext = selectedFile.name.split('.').pop()?.toLowerCase();
-    if (!['ttf', 'otf', 'woff', 'woff2'].includes(ext || '')) {
+  const processFiles = (filesList: FileList | File[]) => {
+    const validFiles: File[] = [];
+    for (let i = 0; i < filesList.length; i++) {
+      const f = filesList[i];
+      const ext = f.name.split('.').pop()?.toLowerCase();
+      if (['ttf', 'otf', 'woff', 'woff2'].includes(ext || '')) {
+        validFiles.push(f);
+      }
+    }
+
+    if (validFiles.length === 0) {
       setStatusMessage({
         type: 'error',
-        text: 'Please upload a valid font file (.ttf, .otf, .woff, .woff2)',
+        text: 'Please upload valid font files (.ttf, .otf, .woff, .woff2)',
       });
       return;
     }
 
-    setFile(selectedFile);
-    // Suggest font name from filename without extension
-    const baseName = selectedFile.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
-    const formattedName = baseName.charAt(0).toUpperCase() + baseName.slice(1);
-    setFontName(formattedName);
+    setSelectedFiles(validFiles);
 
-    // Auto-detect metadata tags (italic, bold, mono, serif, etc.)
-    const auto = autoTagFontMetadata({
-      fontName: formattedName,
-      fileName: selectedFile.name,
-    });
-    if (auto.suggestedCategory) {
-      setFontCategory(auto.suggestedCategory);
+    if (validFiles.length === 1) {
+      const singleFile = validFiles[0];
+      const baseName = singleFile.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
+      const formattedName = baseName.charAt(0).toUpperCase() + baseName.slice(1);
+      setFontName(formattedName);
+
+      const auto = autoTagFontMetadata({
+        fontName: formattedName,
+        fileName: singleFile.name,
+      });
+      if (auto.suggestedCategory) {
+        setFontCategory(auto.suggestedCategory);
+      }
+      setDetectedTags(auto.tags);
+    } else {
+      setFontName(`Bulk Import (${validFiles.length} fonts)`);
+      setDetectedTags(['Bulk Import']);
     }
-    setDetectedTags(auto.tags);
+
     setStatusMessage(null);
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      processFile(e.dataTransfer.files[0]);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      processFiles(e.dataTransfer.files);
     }
   };
 
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      processFile(e.target.files[0]);
+    if (e.target.files && e.target.files.length > 0) {
+      processFiles(e.target.files);
     }
   };
 
   const handleAddFontSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!file || !fontName.trim()) {
-      setStatusMessage({ type: 'error', text: 'Please select a font file and provide a name.' });
+    if (selectedFiles.length === 0) {
+      setStatusMessage({ type: 'error', text: 'Please select font file(s).' });
       return;
     }
 
+    setIsProcessing(true);
     try {
-      const parsed = await parseFontFile(file, selectedFolderId || undefined);
-      if (fontName.trim() && fontName.trim() !== parsed.name) {
-        parsed.name = fontName.trim();
+      const parsedList: FontItem[] = [];
+      for (let i = 0; i < selectedFiles.length; i++) {
+        const file = selectedFiles[i];
+        setProcessProgress(`Parsing font ${i + 1} of ${selectedFiles.length}...`);
+        try {
+          const parsed = await parseFontFile(file, selectedFolderId || undefined);
+          if (selectedFiles.length === 1 && fontName.trim() && fontName.trim() !== parsed.name) {
+            parsed.name = fontName.trim();
+          }
+          if (selectedFiles.length === 1) {
+            parsed.category = fontCategory;
+            if (detectedTags.length > 0) {
+              parsed.tags = Array.from(new Set([...(parsed.tags || []), ...detectedTags]));
+            }
+          }
+          parsedList.push(parsed);
+        } catch (fileErr) {
+          console.warn(`Could not parse ${file.name}:`, fileErr);
+        }
       }
-      parsed.category = fontCategory;
-      if (detectedTags.length > 0) {
-        parsed.tags = Array.from(new Set([...(parsed.tags || []), ...detectedTags]));
+
+      if (parsedList.length === 0) {
+        throw new Error('No fonts could be parsed');
       }
-      onAddCustomFont(parsed);
+
+      if (onAddCustomFonts) {
+        onAddCustomFonts(parsedList);
+      } else {
+        parsedList.forEach((f) => onAddCustomFont(f));
+      }
+
       onClose();
     } catch (err) {
-      console.error('Failed to load font:', err);
+      console.error('Failed to load fonts:', err);
       setStatusMessage({
         type: 'error',
         text: 'Could not parse font binary. Please check file format.',
       });
+    } finally {
+      setIsProcessing(false);
+      setProcessProgress('');
     }
   };
 
@@ -187,7 +232,7 @@ export const AddFontModal: React.FC<AddFontModalProps> = ({
                 className={`border-2 border-dashed rounded-lg p-6 flex flex-col items-center justify-center cursor-pointer transition-colors ${
                   isDragging
                     ? 'border-[#4ade80] bg-[#4ade80]/10'
-                    : file
+                    : selectedFiles.length > 0
                     ? 'border-emerald-600/50 bg-emerald-950/20'
                     : 'border-[#383838] hover:border-[#555555] bg-[#191919]'
                 }`}
@@ -197,28 +242,43 @@ export const AddFontModal: React.FC<AddFontModalProps> = ({
                   ref={fileInputRef}
                   onChange={handleFileInputChange}
                   accept=".ttf,.otf,.woff,.woff2"
+                  multiple
                   className="hidden"
                 />
-                {file ? (
+                {selectedFiles.length > 0 ? (
                   <div className="flex flex-col items-center space-y-1 text-center">
                     <CheckCircle2 className="w-7 h-7 text-[#4ade80]" />
-                    <span className="font-semibold text-white">{file.name}</span>
+                    <span className="font-semibold text-white">
+                      {selectedFiles.length === 1
+                        ? selectedFiles[0].name
+                        : `${selectedFiles.length} font files selected`}
+                    </span>
                     <span className="text-[11px] text-[#888888]">
-                      {(file.size / 1024).toFixed(1)} KB • Click or drop to replace
+                      {selectedFiles.length === 1
+                        ? `${(selectedFiles[0].size / 1024).toFixed(1)} KB • Click or drop more to replace`
+                        : `${(selectedFiles.reduce((acc, f) => acc + f.size, 0) / (1024 * 1024)).toFixed(2)} MB total • Bulk import ready`}
                     </span>
                   </div>
                 ) : (
                   <div className="flex flex-col items-center space-y-2 text-center">
                     <Upload className="w-7 h-7 text-[#777777]" />
                     <span className="text-[#cccccc] font-medium">
-                      Drag and drop your font file here
+                      Drag and drop font files or folder here (Bulk selection supported)
                     </span>
                     <span className="text-[11px] text-[#777777]">
-                      Supports .TTF, .OTF, .WOFF, .WOFF2
+                      Hold Ctrl or Shift to select multiple .TTF, .OTF, .WOFF, .WOFF2 files
                     </span>
                   </div>
                 )}
               </div>
+
+              {/* Progress message during bulk parsing */}
+              {isProcessing && (
+                <div className="bg-[#1e293b] border border-[#3b82f6] text-[#93c5fd] rounded p-2 text-xs flex items-center space-x-2 animate-pulse">
+                  <div className="w-3 h-3 border-2 border-[#38bdf8] border-t-transparent rounded-full animate-spin" />
+                  <span>{processProgress || 'Importing and optimizing fonts...'}</span>
+                </div>
+              )}
 
               {/* Auto-detected tags pill preview */}
               {detectedTags.length > 0 && (
@@ -298,10 +358,21 @@ export const AddFontModal: React.FC<AddFontModalProps> = ({
                 </button>
                 <button
                   type="submit"
-                  disabled={!file || !fontName.trim()}
-                  className="px-4 py-1.5 bg-[#22c55e] hover:bg-[#16a34a] disabled:opacity-50 disabled:pointer-events-none text-black font-semibold rounded transition-colors"
+                  disabled={selectedFiles.length === 0 || isProcessing}
+                  className="px-4 py-1.5 bg-[#22c55e] hover:bg-[#16a34a] disabled:opacity-50 disabled:pointer-events-none text-black font-semibold rounded transition-colors flex items-center space-x-1.5"
                 >
-                  Add Font
+                  {isProcessing ? (
+                    <>
+                      <div className="w-3 h-3 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                      <span>Importing...</span>
+                    </>
+                  ) : (
+                    <span>
+                      {selectedFiles.length > 1
+                        ? `Import ${selectedFiles.length} Fonts`
+                        : 'Add Font'}
+                    </span>
+                  )}
                 </button>
               </div>
             </form>

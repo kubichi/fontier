@@ -35,6 +35,7 @@ export interface FontItem {
   favorite: boolean;
   folderId?: string; // id of folder it belongs to
   provider: 'Google' | 'Local' | 'System';
+  familyGroup?: string; // Base family name for grouping (e.g. 'Archivo', 'Apfel Grotezk')
   designer?: string;
   version?: string;
   license?: string;
@@ -53,6 +54,8 @@ export interface FontItem {
 export interface FolderItem {
   id: string;
   name: string;
+  parentId?: string; // optional parent folder id for subfolders
+  collapsed?: boolean;
   count?: number;
   icon?: string;
   color?: string;
@@ -62,7 +65,7 @@ export interface FontFilters {
   category: string;
   format: string;
   status: 'all' | 'active' | 'inactive' | 'favorites';
-  provider: 'all' | 'local' | 'google';
+  provider: 'all' | 'local' | 'google' | 'system';
 }
 
 export interface AppSettings {
@@ -71,6 +74,7 @@ export interface AppSettings {
   autoActivateOnImport: boolean;
   rowDensity: 'comfortable' | 'compact';
   uiFont?: string;
+  showTitleBarControls?: boolean;
 }
 
 export interface ColorScheme {

@@ -11,6 +11,7 @@ interface FontRowProps {
   alignment: TextAlignment;
   viewMode: ViewMode;
   isSelected?: boolean;
+  isCompact?: boolean;
   onSelectFont?: (font: FontItem) => void;
   onToggleActive: (id: string) => void;
   onToggleFavorite: (id: string) => void;
@@ -18,7 +19,7 @@ interface FontRowProps {
   theme?: 'dark' | 'light';
 }
 
-export const FontRow: React.FC<FontRowProps> = ({
+export const FontRow: React.FC<FontRowProps> = React.memo(({
   font,
   previewText,
   fontSize,
@@ -27,6 +28,7 @@ export const FontRow: React.FC<FontRowProps> = ({
   alignment,
   viewMode,
   isSelected,
+  isCompact = false,
   onSelectFont,
   onToggleActive,
   onToggleFavorite,
@@ -44,7 +46,7 @@ export const FontRow: React.FC<FontRowProps> = ({
   if (viewMode === 'grid') {
     return (
       <div
-        className={`rounded-md border transition-all overflow-hidden flex flex-col group ${
+        className={`rounded-md border transition-all overflow-hidden flex flex-col group font-card-optimized ${
           isLight
             ? isSelected
               ? 'bg-white border-[#16a34a] ring-2 ring-[#16a34a]/30 shadow-md'
@@ -57,8 +59,10 @@ export const FontRow: React.FC<FontRowProps> = ({
       >
         {/* Header bar of card */}
         <div
-          className={`flex items-center justify-between px-3 py-2 border-b text-xs ${
-            isLight ? 'bg-[#f8fafc] border-[#e2e8f0]' : 'bg-[#181818] border-[#262626]'
+          className={`flex items-center justify-between ${
+            isCompact ? 'px-2.5 py-1 text-[11px]' : 'px-3 py-2 text-xs'
+          } border-b ${
+            isLight ? 'bg-[#f8f9fa] border-[#e2e8f0]' : 'bg-[#181818] border-[#262626]'
           }`}
         >
           <div className="flex items-center space-x-2 truncate">
@@ -217,7 +221,7 @@ export const FontRow: React.FC<FontRowProps> = ({
   return (
     <div
       onClick={() => onSelectFont?.(font)}
-      className={`border-b transition-colors group cursor-pointer ${
+      className={`border-b transition-colors group cursor-pointer font-card-optimized ${
         isLight
           ? isSelected
             ? 'bg-[#f0fdf4] border-[#86efac] ring-1 ring-inset ring-[#16a34a]/30'
@@ -228,7 +232,7 @@ export const FontRow: React.FC<FontRowProps> = ({
       }`}
     >
       {/* Top row metadata */}
-      <div className="flex items-center justify-between px-4 pt-3 pb-1 text-xs">
+      <div className={`flex items-center justify-between ${isCompact ? 'px-3 pt-1.5 pb-0.5' : 'px-4 pt-3 pb-1'} text-xs`}>
         <div className="flex items-center space-x-2.5">
           {/* Active indicator circle (pure green) */}
           <button
@@ -384,7 +388,9 @@ export const FontRow: React.FC<FontRowProps> = ({
           onSelectFont?.(font);
           onOpenDetail(font);
         }}
-        className="px-4 py-3 mx-3 my-1.5 rounded-sm cursor-pointer hover:ring-1 hover:ring-[#3b82f6]/50 transition-all select-text"
+        className={`${
+          isCompact ? 'px-3 py-1.5 mx-2 my-0.5' : 'px-4 py-3 mx-3 my-1.5'
+        } rounded-sm cursor-pointer hover:ring-1 hover:ring-[#3b82f6]/50 transition-all select-text`}
         title="Click to open page with full alphabet & glyphs"
       >
         <p
@@ -392,7 +398,7 @@ export const FontRow: React.FC<FontRowProps> = ({
           style={{
             fontFamily: font.fontFamily,
             color: textColor,
-            fontSize: `${fontSize}px`,
+            fontSize: `${isCompact ? Math.max(14, Math.round(fontSize * 0.88)) : fontSize}px`,
           }}
         >
           {previewText || font.name}
@@ -400,5 +406,7 @@ export const FontRow: React.FC<FontRowProps> = ({
       </div>
     </div>
   );
-};
+});
+
+FontRow.displayName = 'FontRow';
 

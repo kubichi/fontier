@@ -1,1 +1,96 @@
 @import "tailwindcss";
+
+/* Cross-browser root scrollbar rules (Firefox & modern browsers) */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+}
+
+.light *,
+[data-theme="light"] * {
+  scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+}
+
+/* WebKit Custom modern scrollbars */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  transition: background-color 0.15s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.35);
+  background-clip: padding-box;
+}
+
+/* Light mode scrollbar thumb */
+.light ::-webkit-scrollbar-thumb,
+[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.22);
+  background-clip: padding-box;
+}
+
+.light ::-webkit-scrollbar-thumb:hover,
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.4);
+  background-clip: padding-box;
+}
+
+/* Scrollbar utility classes */
+.no-scrollbar::-webkit-scrollbar,
+.scrollbar-none::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.no-scrollbar,
+.scrollbar-none {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+}
+
+/* Electron / Tauri desktop titlebar window drag regions */
+.app-drag-region {
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.app-no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* High performance virtual rendering for 8,000+ fonts */
+.font-card-optimized {
+  content-visibility: auto;
+  contain-intrinsic-size: 80px;
+  contain: layout style paint;
+}
+
+/* Animated accent loading progress bar */
+@keyframes loadingShimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  50% {
+    transform: translateX(30%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.loading-bar-indeterminate {
+  animation: loadingShimmer 1.4s ease-in-out infinite;
+}

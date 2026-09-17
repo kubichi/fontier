@@ -1,6 +1,7 @@
 import opentype from 'opentype.js';
 import { FontItem, FontFormat, FontCategory } from '../types';
 import { autoTagFontMetadata } from './autoTagger';
+import { saveFontBinary, registerFontFace } from './fontStorage';
 
 function extractString(nameObj: unknown): string {
   if (!nameObj) return '';
@@ -12,6 +13,16 @@ function extractString(nameObj: unknown): string {
   return String(nameObj);
 }
 
+function extractFamilyGroup(familyName: string, fileName: string): string {
+  let base = familyName || fileName.replace(/\.[^/.]+$/, '');
+  // Remove common weight/style suffixes like Regular, Bold, Italic, 100, 200, etc.
+  base = base
+    .replace(/[-_]/g, ' ')
+    .replace(/\s+(Regular|Bold|Italic|Light|Medium|SemiBold|DemiBold|ExtraBold|Black|Thin|Heavy|ExtraLight|UltraLight|Book|Condensed|Oblique|\d{3}(italic)?)/gi, '')
+    .trim();
+  return base || familyName || 'Untitled Family';
+}
+
 export async function parseFontFile(
   file: File,
   folderId?: string
@@ -19,7 +30,9 @@ export async function parseFontFile(
   const ext = (file.name.split('.').pop()?.toUpperCase() || 'TTF') as FontFormat;
   const arrayBuffer = await file.arrayBuffer();
 
-  let fontName = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
+  const fileBaseName = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
+  let fontName = fileBaseName;
+  let familyGroup = '';
   let designer = 'Unknown Designer';
   let version = 'Version 1.000';
   let license = 'No license information specified in font metadata';
@@ -36,7 +49,10 @@ export async function parseFontFile(
     if (parsedFont && parsedFont.names) {
       const familyName = extractString(parsedFont.names.fontFamily);
       const fullName = extractString(parsedFont.names.fullName);
-      fontName = familyName || fullName || fontName;
+      const typographicFamily = extractString((parsedFont.names as any).preferredFamily || (parsedFont.names as any).typographicFamily);
+      
+      familyGroup = typographicFamily || familyName || extractFamilyGroup(fullName || fontName, file.name);
+      fontName = fullName || familyName || fontName;
 
       subfamily = extractString(parsedFont.names.fontSubfamily) || 'Regular';
       postScriptName = extractString(parsedFont.names.postScriptName) || '';
@@ -58,6 +74,10 @@ export async function parseFontFile(
     console.warn('Could not parse OpenType tables with opentype.js; falling back to basic binary loading:', err);
   }
 
+  if (!familyGroup) {
+    familyGroup = extractFamilyGroup(fontName, file.name);
+  }
+
   // Scan font metadata (italic, bold, mono, serif, etc.) and apply matching system tags
   const autoTagResult = autoTagFontMetadata({
     fontName,
@@ -70,24 +90,25 @@ export async function parseFontFile(
 
   category = autoTagResult.suggestedCategory || category;
 
-  // Generate unique CSS font-family name to avoid collision
-  const safeFontFamily = `UserFont_${Date.now()}_${fontName.replace(/[^a-zA-Z0-9]/g, '_')}`;
+  // Generate unique CSS font-family name to avoid collision across 2,000+ fonts
+  const uniqueId = `local-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+  const safeFontFamily = `UserFont_${uniqueId.replace(/[^a-zA-Z0-9]/g, '_')}`;
 
-  // Register in browser document.fonts via FontFace
-  try {
-    const fontFace = new FontFace(safeFontFamily, arrayBuffer);
-    await fontFace.load();
-    document.fonts.add(fontFace);
-  } catch (loadErr) {
-    console.warn('Failed to load FontFace directly:', loadErr);
-  }
+  // Register FontFace in browser immediately
+  await registerFontFace(safeFontFamily, arrayBuffer);
+
+  // Persist font binary into IndexedDB asynchronously for permanent reload persistence
+  saveFontBinary(uniqueId, safeFontFamily, arrayBuffer).catch((e) => {
+    console.warn('Could not save font to IndexedDB:', e);
+  });
 
   return {
-    id: `local-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
+    id: uniqueId,
     name: fontName,
     fontFamily: `"${safeFontFamily}", sans-serif`,
     format: ext,
     category,
+    familyGroup,
     tags: autoTagResult.tags,
     stylesCount: 1,
     styles: [

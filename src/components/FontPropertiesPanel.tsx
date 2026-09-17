@@ -9,6 +9,8 @@ import {
   CheckCheck,
   Maximize2,
   Info,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 import { FontItem } from '../types';
 import { autoTagFontMetadata } from '../utils/autoTagger';
@@ -37,6 +39,11 @@ export const FontPropertiesPanel: React.FC<FontPropertiesPanelProps> = ({
   theme = 'dark',
 }) => {
   const [copiedCss, setCopiedCss] = useState(false);
+  const [filterTagOpen, setFilterTagOpen] = useState(true);
+  const [systemTagsOpen, setSystemTagsOpen] = useState(true);
+  const [techSpecsOpen, setTechSpecsOpen] = useState(true);
+  const [licensingOpen, setLicensingOpen] = useState(true);
+
   const isLight = theme === 'light';
 
   if (!font) return null;
@@ -110,7 +117,7 @@ export const FontPropertiesPanel: React.FC<FontPropertiesPanelProps> = ({
       </div>
 
       {/* Scrollable Panel Body */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-5">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {/* Typeface Hero Preview */}
         <div
           className={`rounded-lg p-5 border flex flex-col items-center justify-center text-center shadow-inner relative overflow-hidden transition-colors ${
@@ -191,429 +198,478 @@ export const FontPropertiesPanel: React.FC<FontPropertiesPanelProps> = ({
           </button>
         </div>
 
-        {/* Classification & Filter Tagging */}
+        {/* 1. COLLAPSIBLE FILTER TAG SECTION */}
         <div
-          className={`p-3 rounded-lg border space-y-3 ${
-            isLight
-              ? 'bg-[#ffffff] border-[#e2e8f0]'
-              : 'bg-[#202020] border-[#2b2b2b]'
+          className={`rounded-lg border overflow-hidden transition-colors ${
+            isLight ? 'bg-[#ffffff] border-[#e2e8f0]' : 'bg-[#202020] border-[#2b2b2b]'
           }`}
         >
-          {/* Category Classification */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => setFilterTagOpen((prev) => !prev)}
+            className={`w-full flex items-center justify-between p-3 text-left transition-colors ${
+              isLight ? 'hover:bg-[#f8fafc]' : 'hover:bg-[#252525]'
+            }`}
+          >
+            <div className="flex items-center space-x-1.5">
+              {filterTagOpen ? (
+                <ChevronDown className="w-3.5 h-3.5 text-[#16a34a]" />
+              ) : (
+                <ChevronRight className="w-3.5 h-3.5 text-[#888888]" />
+              )}
               <span
                 className={`text-[10px] uppercase font-bold tracking-wider ${
-                  isLight ? 'text-[#64748b]' : 'text-[#888888]'
+                  isLight ? 'text-[#334155]' : 'text-[#cccccc]'
                 }`}
               >
                 Filter Tag / Classification
               </span>
-              <span
-                className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
-                  font.category
-                    ? isLight
-                      ? 'bg-[#dcfce7] text-[#15803d]'
-                      : 'bg-[#1c2e22] text-[#4ade80]'
-                    : isLight
-                    ? 'bg-[#f1f5f9] text-[#94a3b8]'
-                    : 'bg-[#292929] text-[#777777]'
-                }`}
-              >
-                {font.category || 'Untagged'}
-              </span>
             </div>
-            <p className={`text-[10px] ${isLight ? 'text-[#64748b]' : 'text-[#777777]'}`}>
-              Tag this font to match search filters:
-            </p>
-            <div className="flex flex-wrap gap-1.5 pt-0.5">
-              {[
-                'Sans Serif',
-                'Serif',
-                'Slab Serif',
-                'Display',
-                'Monospace',
-                'Handwriting',
-                'Pixel',
-              ].map((tag) => {
-                const isSelected =
-                  font.category?.toLowerCase().replace(/[\s-_]/g, '') ===
-                  tag.toLowerCase().replace(/[\s-_]/g, '');
-                return (
-                  <button
-                    key={tag}
-                    type="button"
-                    onClick={() =>
-                      onUpdateFont?.(font.id, {
-                        category: isSelected ? '' : tag,
-                      })
-                    }
-                    className={`px-2 py-1 rounded text-[11px] font-medium transition-colors border ${
-                      isSelected
-                        ? isLight
-                          ? 'border-[#16a34a] bg-[#16a34a] text-white font-semibold'
-                          : 'border-[#4ade80] bg-[#22c55e] text-black font-semibold'
-                        : isLight
-                        ? 'border-[#cbd5e1] bg-[#f8fafc] text-[#475569] hover:bg-[#f1f5f9]'
-                        : 'border-[#333333] bg-[#252525] text-[#aaaaaa] hover:text-white hover:bg-[#2e2e2e]'
-                    }`}
-                  >
-                    {isSelected && <Check className="w-2.5 h-2.5 inline mr-1 stroke-[3]" />}
-                    {tag}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+            <span
+              className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
+                font.category
+                  ? isLight
+                    ? 'bg-[#dcfce7] text-[#15803d]'
+                    : 'bg-[#1c2e22] text-[#4ade80]'
+                  : isLight
+                  ? 'bg-[#f1f5f9] text-[#94a3b8]'
+                  : 'bg-[#292929] text-[#777777]'
+              }`}
+            >
+              {font.category || 'Untagged'}
+            </span>
+          </button>
 
-          {/* Auto-detected System Tags */}
-          <div className="space-y-1.5 pt-2 border-t border-[#2a2a2a]/60">
-            <div className="flex items-center justify-between">
+          {filterTagOpen && (
+            <div className={`p-3 pt-0 space-y-2 border-t ${isLight ? 'border-[#f1f5f9]' : 'border-[#282828]'}`}>
+              <p className={`text-[10px] mt-2.5 ${isLight ? 'text-[#64748b]' : 'text-[#777777]'}`}>
+                Tag this font to match search filters:
+              </p>
+              <div className="flex flex-wrap gap-1.5 pt-0.5">
+                {[
+                  'Sans Serif',
+                  'Serif',
+                  'Slab Serif',
+                  'Display',
+                  'Monospace',
+                  'Handwriting',
+                  'Pixel',
+                ].map((tag) => {
+                  const isSelected =
+                    font.category?.toLowerCase().replace(/[\s-_]/g, '') ===
+                    tag.toLowerCase().replace(/[\s-_]/g, '');
+                  return (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() =>
+                        onUpdateFont?.(font.id, {
+                          category: isSelected ? '' : tag,
+                        })
+                      }
+                      className={`px-2 py-1 rounded text-[11px] font-medium transition-colors border ${
+                        isSelected
+                          ? isLight
+                            ? 'border-[#16a34a] bg-[#16a34a] text-white font-semibold'
+                            : 'border-[#4ade80] bg-[#22c55e] text-black font-semibold'
+                          : isLight
+                          ? 'border-[#cbd5e1] bg-[#f8fafc] text-[#475569] hover:bg-[#f1f5f9]'
+                          : 'border-[#333333] bg-[#252525] text-[#aaaaaa] hover:text-white hover:bg-[#2e2e2e]'
+                      }`}
+                    >
+                      {isSelected && <Check className="w-2.5 h-2.5 inline mr-1 stroke-[3]" />}
+                      {tag}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* 2. COLLAPSIBLE SYSTEM TAGS SECTION */}
+        <div
+          className={`rounded-lg border overflow-hidden transition-colors ${
+            isLight ? 'bg-[#ffffff] border-[#e2e8f0]' : 'bg-[#202020] border-[#2b2b2b]'
+          }`}
+        >
+          <button
+            type="button"
+            onClick={() => setSystemTagsOpen((prev) => !prev)}
+            className={`w-full flex items-center justify-between p-3 text-left transition-colors ${
+              isLight ? 'hover:bg-[#f8fafc]' : 'hover:bg-[#252525]'
+            }`}
+          >
+            <div className="flex items-center space-x-1.5">
+              {systemTagsOpen ? (
+                <ChevronDown className="w-3.5 h-3.5 text-[#16a34a]" />
+              ) : (
+                <ChevronRight className="w-3.5 h-3.5 text-[#888888]" />
+              )}
               <span
                 className={`text-[10px] uppercase font-bold tracking-wider ${
-                  isLight ? 'text-[#64748b]' : 'text-[#888888]'
+                  isLight ? 'text-[#334155]' : 'text-[#cccccc]'
                 }`}
               >
                 System Tags (Auto-detected)
               </span>
-              <button
-                type="button"
-                onClick={() => {
-                  const auto = autoTagFontMetadata({
-                    fontName: font.name,
-                    postScriptName: font.postScriptName,
-                    fileName: font.fileName,
-                    subfamily: font.styles?.[0]?.name,
-                    weight: font.styles?.[0]?.weight,
-                    isItalic: font.styles?.[0]?.style === 'italic',
-                  });
-                  onUpdateFont?.(font.id, {
-                    tags: auto.tags,
-                    category: auto.suggestedCategory || font.category,
-                  });
-                }}
-                className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors border ${
-                  isLight
-                    ? 'border-[#cbd5e1] bg-[#f8fafc] hover:bg-[#f1f5f9] text-[#0f172a]'
-                    : 'border-[#333333] bg-[#252525] hover:bg-[#2e2e2e] text-[#cccccc]'
-                }`}
-                title="Scan font metadata and automatically apply matching tags"
-              >
-                <span>Auto-scan</span>
-              </button>
             </div>
+            <span
+              className={`text-[10px] font-mono ${
+                isLight ? 'text-[#94a3b8]' : 'text-[#777777]'
+              }`}
+            >
+              {font.tags?.length || 0} tags
+            </span>
+          </button>
 
-            {/* Existing tags list */}
-            {font.tags && font.tags.length > 0 ? (
-              <div className="flex flex-wrap gap-1">
-                {font.tags.map((tag) => (
-                  <span
-                    key={tag}
-                    className={`px-1.5 py-0.5 rounded text-[10px] font-medium border ${
-                      isLight
-                        ? 'bg-[#ecfdf5] text-[#047857] border-[#a7f3d0]'
-                        : 'bg-[#172b1e] text-[#4ade80] border-[#225032]'
-                    }`}
-                  >
-                    {tag}
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <p className={`text-[10px] italic ${isLight ? 'text-[#94a3b8]' : 'text-[#666666]'}`}>
-                No tags detected yet. Click Auto-scan to scan font metadata.
-              </p>
-            )}
-
-            {/* Quick tag toggles */}
-            <div className="flex flex-wrap gap-1 pt-1">
-              {['Mono', 'Bold', 'Italic', 'Light', 'Condensed'].map((t) => {
-                const hasTag = font.tags?.includes(t);
-                return (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => {
-                      const current = font.tags || [];
-                      const updated = hasTag
-                        ? current.filter((x) => x !== t)
-                        : [...current, t];
-                      onUpdateFont?.(font.id, { tags: updated });
-                    }}
-                    className={`px-1.5 py-0.5 rounded text-[10px] font-medium border transition-colors ${
-                      hasTag
-                        ? isLight
-                          ? 'border-[#059669] bg-[#10b981] text-white'
-                          : 'border-[#4ade80] bg-[#16a34a] text-white'
-                        : isLight
-                        ? 'border-[#e2e8f0] bg-[#f8fafc] text-[#64748b] hover:bg-[#f1f5f9]'
-                        : 'border-[#2d2d2d] bg-[#1a1a1a] text-[#777777] hover:text-[#bbbbbb]'
-                    }`}
-                  >
-                    {hasTag ? `✓ ${t}` : `+ ${t}`}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
-        {/* 1. Core Font Specifications */}
-        <div className="space-y-2.5">
-          <span
-            className={`text-[10px] uppercase font-bold tracking-wider block ${
-              isLight ? 'text-[#64748b]' : 'text-[#888888]'
-            }`}
-          >
-            File & Technical Specifications
-          </span>
-
-          <div
-            className={`rounded-lg border text-xs divide-y ${
-              isLight
-                ? 'bg-[#ffffff] border-[#e2e8f0] divide-[#f1f5f9]'
-                : 'bg-[#1e1e1e] border-[#2b2b2b] divide-[#282828]'
-            }`}
-          >
-            {/* Classification */}
-            <div className="flex items-center justify-between p-2.5">
-              <span className={`text-[11px] ${isLight ? 'text-[#64748b]' : 'text-[#888888]'}`}>
-                Category Tag
-              </span>
-              <span
-                className={`font-medium text-[11px] ${
-                  isLight ? 'text-[#0f172a]' : 'text-white'
-                }`}
-              >
-                {font.category || 'Untagged'}
-              </span>
-            </div>
-
-            {/* System Tags */}
-            {font.tags && font.tags.length > 0 && (
-              <div className="flex items-center justify-between p-2.5">
-                <span className={`text-[11px] ${isLight ? 'text-[#64748b]' : 'text-[#888888]'}`}>
-                  System Tags
+          {systemTagsOpen && (
+            <div className={`p-3 pt-0 space-y-2 border-t ${isLight ? 'border-[#f1f5f9]' : 'border-[#282828]'}`}>
+              <div className="flex items-center justify-between mt-2.5">
+                <span className={`text-[10px] ${isLight ? 'text-[#64748b]' : 'text-[#777777]'}`}>
+                  Metadata tag analyzer
                 </span>
-                <div className="flex flex-wrap gap-1 justify-end max-w-[200px]">
-                  {font.tags.map((t) => (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const auto = autoTagFontMetadata({
+                      fontName: font.name,
+                      postScriptName: font.postScriptName,
+                      fileName: font.fileName,
+                      subfamily: font.styles?.[0]?.name,
+                      weight: font.styles?.[0]?.weight,
+                      isItalic: font.styles?.[0]?.style === 'italic',
+                    });
+                    onUpdateFont?.(font.id, {
+                      tags: auto.tags,
+                      category: auto.suggestedCategory || font.category,
+                    });
+                  }}
+                  className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors border ${
+                    isLight
+                      ? 'border-[#cbd5e1] bg-[#f8fafc] hover:bg-[#f1f5f9] text-[#0f172a]'
+                      : 'border-[#333333] bg-[#252525] hover:bg-[#2e2e2e] text-[#cccccc]'
+                  }`}
+                  title="Scan font metadata and automatically apply matching tags"
+                >
+                  <span>Auto-scan</span>
+                </button>
+              </div>
+
+              {/* Existing tags list */}
+              {font.tags && font.tags.length > 0 ? (
+                <div className="flex flex-wrap gap-1">
+                  {font.tags.map((tag) => (
                     <span
-                      key={t}
-                      className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                      key={tag}
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-medium border ${
                         isLight
-                          ? 'bg-[#f1f5f9] text-[#334155] border border-[#cbd5e1]'
-                          : 'bg-[#252525] text-[#4ade80] border border-[#333333]'
+                          ? 'bg-[#ecfdf5] text-[#047857] border-[#a7f3d0]'
+                          : 'bg-[#172b1e] text-[#4ade80] border-[#225032]'
                       }`}
                     >
-                      {t}
+                      {tag}
                     </span>
                   ))}
                 </div>
-              </div>
-            )}
-
-            {/* File Type */}
-            <div className="flex items-center justify-between p-2.5">
-              <span className={`text-[11px] ${isLight ? 'text-[#64748b]' : 'text-[#888888]'}`}>
-                File Type / Format
-              </span>
-              <div className="flex items-center space-x-1.5">
-                <span className="px-1.5 py-0.5 bg-[#252525] border border-[#383838] font-mono text-[#4ade80] font-bold text-[10px] rounded">
-                  .{font.format}
-                </span>
-                <span className={`text-[10px] ${isLight ? 'text-[#64748b]' : 'text-[#999999]'}`}>
-                  {font.format === 'TTF' ? 'TrueType' : font.format === 'OTF' ? 'OpenType' : 'Web Open'}
-                </span>
-              </div>
-            </div>
-
-            {/* Version Number */}
-            <div className="flex items-center justify-between p-2.5">
-              <span className={`text-[11px] ${isLight ? 'text-[#64748b]' : 'text-[#888888]'}`}>
-                Version Number
-              </span>
-              <span
-                className={`font-mono text-[11px] font-medium truncate max-w-[150px] ${
-                  isLight ? 'text-[#0f172a]' : 'text-white'
-                }`}
-                title={font.version || 'Version 1.000'}
-              >
-                {font.version || 'Version 1.000'}
-              </span>
-            </div>
-
-            {/* Designer / Author */}
-            <div className="flex items-start justify-between p-2.5">
-              <span className={`text-[11px] shrink-0 ${isLight ? 'text-[#64748b]' : 'text-[#888888]'}`}>
-                Designer
-              </span>
-              <span
-                className={`font-medium text-right text-[11px] truncate max-w-[160px] ${
-                  isLight ? 'text-[#0f172a]' : 'text-white'
-                }`}
-                title={font.designer || 'Independent Foundry'}
-              >
-                {font.designer || 'Independent Foundry'}
-              </span>
-            </div>
-
-            {/* PostScript Name */}
-            {font.postScriptName && (
-              <div className="flex items-center justify-between p-2.5">
-                <span className={`text-[11px] ${isLight ? 'text-[#64748b]' : 'text-[#888888]'}`}>
-                  PostScript Name
-                </span>
-                <span
-                  className={`font-mono text-[10px] truncate max-w-[150px] ${
-                    isLight ? 'text-[#334155]' : 'text-[#d4d4d4]'
-                  }`}
-                >
-                  {font.postScriptName}
-                </span>
-              </div>
-            )}
-
-            {/* Glyphs count */}
-            <div className="flex items-center justify-between p-2.5">
-              <span className={`text-[11px] ${isLight ? 'text-[#64748b]' : 'text-[#888888]'}`}>
-                Glyphs Count
-              </span>
-              <span
-                className={`font-mono text-[11px] ${isLight ? 'text-[#0f172a]' : 'text-white'}`}
-              >
-                {font.numGlyphs ? `${font.numGlyphs.toLocaleString()} glyphs` : 'Standard charset'}
-              </span>
-            </div>
-
-            {/* File Size */}
-            <div className="flex items-center justify-between p-2.5">
-              <span className={`text-[11px] ${isLight ? 'text-[#64748b]' : 'text-[#888888]'}`}>
-                File Size
-              </span>
-              <span
-                className={`font-mono text-[11px] ${isLight ? 'text-[#0f172a]' : 'text-white'}`}
-              >
-                {formatBytes(font.fileSize)}
-              </span>
-            </div>
-
-            {/* File Name & Source */}
-            <div className="p-2.5 space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-[#888888] text-[11px]">File Source</span>
-                <span className="text-[10px] text-[#22c55e] font-medium">
-                  {font.provider === 'Local' ? 'Local Storage Folder' : 'Google Fonts'}
-                </span>
-              </div>
-              {font.fileName && (
-                <div className="font-mono text-[10px] text-[#777777] truncate bg-[#161616] p-1.5 rounded border border-[#282828]" title={font.filePath || font.fileName}>
-                  {font.filePath || font.fileName}
-                </div>
+              ) : (
+                <p className={`text-[10px] italic ${isLight ? 'text-[#94a3b8]' : 'text-[#666666]'}`}>
+                  No tags detected yet. Click Auto-scan to scan font metadata.
+                </p>
               )}
+
+              {/* Quick tag toggles */}
+              <div className="flex flex-wrap gap-1 pt-1">
+                {['Mono', 'Bold', 'Italic', 'Light', 'Condensed'].map((t) => {
+                  const hasTag = font.tags?.includes(t);
+                  return (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => {
+                        const current = font.tags || [];
+                        const updated = hasTag
+                          ? current.filter((x) => x !== t)
+                          : [...current, t];
+                        onUpdateFont?.(font.id, { tags: updated });
+                      }}
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-medium border transition-colors ${
+                        hasTag
+                          ? isLight
+                            ? 'border-[#059669] bg-[#10b981] text-white'
+                            : 'border-[#4ade80] bg-[#16a34a] text-white'
+                          : isLight
+                          ? 'border-[#e2e8f0] bg-[#f8fafc] text-[#64748b] hover:bg-[#f1f5f9]'
+                          : 'border-[#2d2d2d] bg-[#1a1a1a] text-[#777777] hover:text-[#bbbbbb]'
+                      }`}
+                    >
+                      {hasTag ? `✓ ${t}` : `+ ${t}`}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
-        {/* 2. Dedicated Licensing Information Panel */}
-        <div className="space-y-2.5">
-          <span
-            className={`text-[10px] uppercase font-bold tracking-wider block ${
-              isLight ? 'text-[#64748b]' : 'text-[#888888]'
+        {/* 3. COLLAPSIBLE FILE TECHNICAL SPECIFICATIONS */}
+        <div
+          className={`rounded-lg border overflow-hidden transition-colors ${
+            isLight ? 'bg-[#ffffff] border-[#e2e8f0]' : 'bg-[#1e1e1e] border-[#2b2b2b]'
+          }`}
+        >
+          <button
+            type="button"
+            onClick={() => setTechSpecsOpen((prev) => !prev)}
+            className={`w-full flex items-center justify-between p-3 text-left transition-colors ${
+              isLight ? 'hover:bg-[#f8fafc]' : 'hover:bg-[#252525]'
             }`}
           >
-            Licensing & Usage Rights
-          </span>
+            <div className="flex items-center space-x-1.5">
+              {techSpecsOpen ? (
+                <ChevronDown className="w-3.5 h-3.5 text-[#16a34a]" />
+              ) : (
+                <ChevronRight className="w-3.5 h-3.5 text-[#888888]" />
+              )}
+              <span
+                className={`text-[10px] uppercase font-bold tracking-wider ${
+                  isLight ? 'text-[#334155]' : 'text-[#cccccc]'
+                }`}
+              >
+                File & Technical Specifications
+              </span>
+            </div>
+            <span className="px-1.5 py-0.5 bg-[#252525] border border-[#383838] font-mono text-[#4ade80] font-bold text-[10px] rounded">
+              .{font.format}
+            </span>
+          </button>
 
-          <div
-            className={`rounded-lg border p-3 space-y-3 ${
-              isLight
-                ? 'bg-[#ffffff] border-[#e2e8f0]'
-                : 'bg-[#1e1e1e] border-[#2b2b2b]'
-            }`}
-          >
-            <div className="flex items-start space-x-2">
-              <ShieldCheck className="w-4 h-4 text-[#16a34a] shrink-0 mt-0.5" />
-              <div className="space-y-1">
+          {techSpecsOpen && (
+            <div
+              className={`text-xs divide-y border-t ${
+                isLight
+                  ? 'divide-[#f1f5f9] border-[#f1f5f9]'
+                  : 'divide-[#282828] border-[#282828]'
+              }`}
+            >
+              {/* Classification */}
+              <div className="flex items-center justify-between p-2.5">
+                <span className={`text-[11px] ${isLight ? 'text-[#64748b]' : 'text-[#888888]'}`}>
+                  Category Tag
+                </span>
                 <span
-                  className={`font-semibold block text-xs ${
+                  className={`font-medium text-[11px] ${
                     isLight ? 'text-[#0f172a]' : 'text-white'
                   }`}
                 >
-                  {font.license || 'Standard Font License'}
+                  {font.category || 'Untagged'}
                 </span>
-                {font.licenseUrl ? (
-                  <a
-                    href={font.licenseUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-[11px] text-[#0284c7] hover:underline flex items-center space-x-1"
-                  >
-                    <span>View Official License Document</span>
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
-                ) : (
-                  <span className={`text-[11px] ${isLight ? 'text-[#64748b]' : 'text-[#777777]'}`}>
-                    Standard desktop and personal usage permit.
+              </div>
+
+              {/* Version Number */}
+              <div className="flex items-center justify-between p-2.5">
+                <span className={`text-[11px] ${isLight ? 'text-[#64748b]' : 'text-[#888888]'}`}>
+                  Version Number
+                </span>
+                <span
+                  className={`font-mono text-[11px] font-medium truncate max-w-[150px] ${
+                    isLight ? 'text-[#0f172a]' : 'text-white'
+                  }`}
+                  title={font.version || 'Version 1.000'}
+                >
+                  {font.version || 'Version 1.000'}
+                </span>
+              </div>
+
+              {/* Designer / Author */}
+              <div className="flex items-start justify-between p-2.5">
+                <span className={`text-[11px] shrink-0 ${isLight ? 'text-[#64748b]' : 'text-[#888888]'}`}>
+                  Designer
+                </span>
+                <span
+                  className={`font-medium text-right text-[11px] truncate max-w-[160px] ${
+                    isLight ? 'text-[#0f172a]' : 'text-white'
+                  }`}
+                  title={font.designer || 'Independent Foundry'}
+                >
+                  {font.designer || 'Independent Foundry'}
+                </span>
+              </div>
+
+              {/* PostScript Name */}
+              {font.postScriptName && (
+                <div className="flex items-center justify-between p-2.5">
+                  <span className={`text-[11px] ${isLight ? 'text-[#64748b]' : 'text-[#888888]'}`}>
+                    PostScript Name
                   </span>
+                  <span
+                    className={`font-mono text-[10px] truncate max-w-[150px] ${
+                      isLight ? 'text-[#334155]' : 'text-[#d4d4d4]'
+                    }`}
+                  >
+                    {font.postScriptName}
+                  </span>
+                </div>
+              )}
+
+              {/* Glyphs count */}
+              <div className="flex items-center justify-between p-2.5">
+                <span className={`text-[11px] ${isLight ? 'text-[#64748b]' : 'text-[#888888]'}`}>
+                  Glyphs Count
+                </span>
+                <span
+                  className={`font-mono text-[11px] ${isLight ? 'text-[#0f172a]' : 'text-white'}`}
+                >
+                  {font.numGlyphs ? `${font.numGlyphs.toLocaleString()} glyphs` : 'Standard charset'}
+                </span>
+              </div>
+
+              {/* File Size */}
+              <div className="flex items-center justify-between p-2.5">
+                <span className={`text-[11px] ${isLight ? 'text-[#64748b]' : 'text-[#888888]'}`}>
+                  File Size
+                </span>
+                <span
+                  className={`font-mono text-[11px] ${isLight ? 'text-[#0f172a]' : 'text-white'}`}
+                >
+                  {formatBytes(font.fileSize)}
+                </span>
+              </div>
+
+              {/* File Name & Source */}
+              <div className="p-2.5 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-[#888888] text-[11px]">File Source</span>
+                  <span className="text-[10px] text-[#22c55e] font-medium">
+                    {font.provider === 'Local' ? 'Local Storage Folder' : 'Google Fonts'}
+                  </span>
+                </div>
+                {font.fileName && (
+                  <div className="font-mono text-[10px] text-[#777777] truncate bg-[#161616] p-1.5 rounded border border-[#282828]" title={font.filePath || font.fileName}>
+                    {font.filePath || font.fileName}
+                  </div>
                 )}
               </div>
             </div>
+          )}
+        </div>
 
-            {font.copyright && (
-              <div
-                className={`pt-2 border-t text-[11px] leading-relaxed ${
-                  isLight
-                    ? 'border-[#e2e8f0] text-[#64748b]'
-                    : 'border-[#2a2a2a] text-[#888888]'
+        {/* 4. COLLAPSIBLE LICENSING & USAGE RIGHTS */}
+        <div
+          className={`rounded-lg border overflow-hidden transition-colors ${
+            isLight ? 'bg-[#ffffff] border-[#e2e8f0]' : 'bg-[#1e1e1e] border-[#2b2b2b]'
+          }`}
+        >
+          <button
+            type="button"
+            onClick={() => setLicensingOpen((prev) => !prev)}
+            className={`w-full flex items-center justify-between p-3 text-left transition-colors ${
+              isLight ? 'hover:bg-[#f8fafc]' : 'hover:bg-[#252525]'
+            }`}
+          >
+            <div className="flex items-center space-x-1.5">
+              {licensingOpen ? (
+                <ChevronDown className="w-3.5 h-3.5 text-[#16a34a]" />
+              ) : (
+                <ChevronRight className="w-3.5 h-3.5 text-[#888888]" />
+              )}
+              <span
+                className={`text-[10px] uppercase font-bold tracking-wider ${
+                  isLight ? 'text-[#334155]' : 'text-[#cccccc]'
                 }`}
               >
-                <span
-                  className={`font-medium block mb-0.5 ${
-                    isLight ? 'text-[#334155]' : 'text-[#aaaaaa]'
-                  }`}
-                >
-                  Copyright Notice:
-                </span>
-                <span className="italic">{font.copyright}</span>
-              </div>
-            )}
+                Licensing & Usage Rights
+              </span>
+            </div>
+            <ShieldCheck className="w-3.5 h-3.5 text-[#16a34a]" />
+          </button>
 
-            {/* Commercial & Personal Usage Badges */}
-            <div className="grid grid-cols-2 gap-2 pt-1">
-              <div
-                className={`p-2 rounded flex items-center space-x-1.5 border ${
-                  isLight
-                    ? 'bg-[#f8fafc] border-[#e2e8f0]'
-                    : 'bg-[#242424] border-[#303030]'
-                }`}
-              >
-                <div className="w-2 h-2 rounded-full bg-[#22c55e]" />
-                <span
-                  className={`text-[10px] font-medium ${
-                    isLight ? 'text-[#334155]' : 'text-[#cccccc]'
-                  }`}
-                >
-                  Commercial Use
-                </span>
+          {licensingOpen && (
+            <div className={`p-3 pt-0 space-y-3 border-t ${isLight ? 'border-[#f1f5f9]' : 'border-[#282828]'}`}>
+              <div className="flex items-start space-x-2 mt-2.5">
+                <ShieldCheck className="w-4 h-4 text-[#16a34a] shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <span
+                    className={`font-semibold block text-xs ${
+                      isLight ? 'text-[#0f172a]' : 'text-white'
+                    }`}
+                  >
+                    {font.license || 'Standard Font License'}
+                  </span>
+                  {font.licenseUrl ? (
+                    <a
+                      href={font.licenseUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[11px] text-[#0284c7] hover:underline flex items-center space-x-1"
+                    >
+                      <span>View Official License Document</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  ) : (
+                    <span className={`text-[11px] ${isLight ? 'text-[#64748b]' : 'text-[#777777]'}`}>
+                      Standard desktop and personal usage permit.
+                    </span>
+                  )}
+                </div>
               </div>
-              <div
-                className={`p-2 rounded flex items-center space-x-1.5 border ${
-                  isLight
-                    ? 'bg-[#f8fafc] border-[#e2e8f0]'
-                    : 'bg-[#242424] border-[#303030]'
-                }`}
-              >
-                <div className="w-2 h-2 rounded-full bg-[#22c55e]" />
-                <span
-                  className={`text-[10px] font-medium ${
-                    isLight ? 'text-[#334155]' : 'text-[#cccccc]'
+
+              {font.copyright && (
+                <div
+                  className={`pt-2 border-t text-[11px] leading-relaxed ${
+                    isLight
+                      ? 'border-[#e2e8f0] text-[#64748b]'
+                      : 'border-[#2a2a2a] text-[#888888]'
                   }`}
                 >
-                  Personal Use
-                </span>
+                  <span
+                    className={`font-medium block mb-0.5 ${
+                      isLight ? 'text-[#334155]' : 'text-[#aaaaaa]'
+                    }`}
+                  >
+                    Copyright Notice:
+                  </span>
+                  <span className="italic">{font.copyright}</span>
+                </div>
+              )}
+
+              {/* Commercial & Personal Usage Badges */}
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <div
+                  className={`p-2 rounded flex items-center space-x-1.5 border ${
+                    isLight
+                      ? 'bg-[#f8fafc] border-[#e2e8f0]'
+                      : 'bg-[#242424] border-[#303030]'
+                  }`}
+                >
+                  <div className="w-2 h-2 rounded-full bg-[#22c55e]" />
+                  <span
+                    className={`text-[10px] font-medium ${
+                      isLight ? 'text-[#334155]' : 'text-[#cccccc]'
+                    }`}
+                  >
+                    Commercial Use
+                  </span>
+                </div>
+                <div
+                  className={`p-2 rounded flex items-center space-x-1.5 border ${
+                    isLight
+                      ? 'bg-[#f8fafc] border-[#e2e8f0]'
+                      : 'bg-[#242424] border-[#303030]'
+                  }`}
+                >
+                  <div className="w-2 h-2 rounded-full bg-[#22c55e]" />
+                  <span
+                    className={`text-[10px] font-medium ${
+                      isLight ? 'text-[#334155]' : 'text-[#cccccc]'
+                    }`}
+                  >
+                    Personal Use
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Copy CSS helper */}

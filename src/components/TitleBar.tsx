@@ -9,9 +9,10 @@ interface TitleBarProps {
   onUpdateFilters: (newFilters: Partial<FontFilters>) => void;
   onResetFilters: () => void;
   theme?: 'dark' | 'light';
+  showControls?: boolean;
 }
 
-const CATEGORIES = ['All', 'Sans Serif', 'Serif', 'Slab Serif', 'Display', 'Monospace', 'Handwriting', 'Pixel'];
+const CATEGORIES = ['All', 'Sans-Serif', 'Serif', 'Display', 'Monospace', 'Handwriting'];
 const FORMATS = [
   { label: 'All', value: 'all' },
   { label: 'TTF', value: 'ttf' },
@@ -20,6 +21,26 @@ const FORMATS = [
   { label: 'WOFF2', value: 'woff2' },
 ];
 
+// Crisp inline vector logo that renders flawlessly in both web and Electron file:// environments
+const FontierLogo: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) => (
+  <svg
+    viewBox="0 0 160 160"
+    className={`${className} shrink-0 rounded-xs shadow-xs select-none`}
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <rect x="2" y="2" width="156" height="156" rx="36" fill="#14161b" stroke="#2c303a" strokeWidth="4" />
+    <path
+      d="M 140,36 L 140,50 L 62,50 C 44,50 36,60 36,78 L 36,122 L 22,122 L 22,76 C 22,48 38,36 64,36 Z"
+      fill="#ffffff"
+    />
+    <path
+      d="M 140,72 L 140,86 L 66,86 C 54,86 42,92 36,101 L 36,83 C 44,75 54,72 66,72 Z"
+      fill="#cfd6e0"
+    />
+  </svg>
+);
+
 export const TitleBar: React.FC<TitleBarProps> = ({
   searchQuery,
   onSearchChange,
@@ -27,10 +48,43 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   onUpdateFilters,
   onResetFilters,
   theme = 'dark',
+  showControls = true,
 }) => {
   const [showFilterMenu, setShowFilterMenu] = useState(false);
+  const [isMaximized, setIsMaximized] = useState(false);
   const filterMenuRef = useRef<HTMLDivElement>(null);
   const isLight = theme === 'light';
+
+  // Desktop window actions
+  const handleMinimize = () => {
+    const api = (window as any).electronAPI || (window as any).electron;
+    if (api?.minimize) {
+      api.minimize();
+    }
+  };
+
+  const handleMaximize = () => {
+    const api = (window as any).electronAPI || (window as any).electron;
+    if (api?.maximize) {
+      api.maximize();
+    }
+    setIsMaximized((prev) => !prev);
+  };
+
+  const handleClose = () => {
+    const api = (window as any).electronAPI || (window as any).electron;
+    if (api?.close) {
+      api.close();
+    }
+  };
+
+  // Allow double-clicking on empty title bar region to maximize/restore (standard Windows behavior)
+  const handleTitleBarDoubleClick = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest('.app-no-drag')) {
+      return;
+    }
+    handleMaximize();
+  };
 
   // Close filter popover on outside click
   useEffect(() => {
@@ -55,31 +109,27 @@ export const TitleBar: React.FC<TitleBarProps> = ({
 
   return (
     <header
-      className={`h-10 border-b flex items-center justify-between px-3 select-none text-xs z-30 shrink-0 transition-colors ${
+      onDoubleClick={handleTitleBarDoubleClick}
+      className={`h-10 border-b flex items-center justify-between px-3 select-none text-xs z-30 shrink-0 transition-colors app-drag-region ${
         isLight
           ? 'bg-[#f8f9fa] border-[#e2e8f0] text-[#64748b]'
           : 'bg-[#161616] border-[#262626] text-[#a0a0a0]'
       }`}
     >
       {/* Left section: Clean application branding */}
-      <div className="flex items-center space-x-2">
+      <div className="flex items-center space-x-2 app-no-drag">
         <span
           className={`font-semibold text-xs tracking-tight flex items-center gap-2 ${
             isLight ? 'text-[#0f172a]' : 'text-white'
           }`}
         >
-          <img
-            src="/icon.svg"
-            alt="Fontier Icon"
-            className="w-4 h-4 rounded-xs shadow-xs object-contain shrink-0"
-            referrerPolicy="no-referrer"
-          />
+          <FontierLogo className="w-4 h-4" />
           <span className="font-semibold tracking-tight">Fontier</span>
         </span>
       </div>
 
       {/* Middle section: Global Font Search & Filter Dropdown */}
-      <div className="flex-1 max-w-xl mx-4 flex items-center justify-center relative" ref={filterMenuRef}>
+      <div className="flex-1 max-w-xl mx-4 flex items-center justify-center relative app-no-drag" ref={filterMenuRef}>
         <div className="relative w-full max-w-md">
           <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
             <Search className={`w-3.5 h-3.5 ${isLight ? 'text-[#94a3b8]' : 'text-[#666666]'}`} />
@@ -288,6 +338,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
                   <option value="all">All Sources</option>
                   <option value="local">Local Folder Only</option>
                   <option value="google">Google Fonts Only</option>
+                  <option value="system">Windows System Only</option>
                 </select>
               </div>
             </div>
@@ -296,34 +347,46 @@ export const TitleBar: React.FC<TitleBarProps> = ({
       </div>
 
       {/* Right section: Window Chrome */}
-      <div className="flex items-center space-x-1">
-        <button
-          className={`w-7 h-7 flex items-center justify-center rounded transition-colors ${
-            isLight
-              ? 'hover:bg-[#e2e8f0] text-[#64748b] hover:text-[#0f172a]'
-              : 'hover:bg-[#2a2a2a] text-[#888888] hover:text-[#e0e0e0]'
-          }`}
-          title="Minimize"
-        >
-          <Minus className="w-3 h-3" />
-        </button>
-        <button
-          className={`w-7 h-7 flex items-center justify-center rounded transition-colors ${
-            isLight
-              ? 'hover:bg-[#e2e8f0] text-[#64748b] hover:text-[#0f172a]'
-              : 'hover:bg-[#2a2a2a] text-[#888888] hover:text-[#e0e0e0]'
-          }`}
-          title="Maximize"
-        >
-          <Square className="w-2.5 h-2.5" />
-        </button>
-        <button
-          className="w-7 h-7 flex items-center justify-center hover:bg-[#ef4444] text-[#888888] hover:text-white rounded transition-colors"
-          title="Close"
-        >
-          <X className="w-3 h-3" />
-        </button>
-      </div>
+      {showControls && (
+        <div className="flex items-center space-x-1 app-no-drag">
+          <button
+            onClick={handleMinimize}
+            className={`w-7 h-7 flex items-center justify-center rounded transition-colors ${
+              isLight
+                ? 'hover:bg-[#e2e8f0] text-[#64748b] hover:text-[#0f172a]'
+                : 'hover:bg-[#2a2a2a] text-[#888888] hover:text-[#e0e0e0]'
+            }`}
+            title="Minimize"
+          >
+            <Minus className="w-3 h-3" />
+          </button>
+          <button
+            onClick={handleMaximize}
+            className={`w-7 h-7 flex items-center justify-center rounded transition-colors ${
+              isLight
+                ? 'hover:bg-[#e2e8f0] text-[#64748b] hover:text-[#0f172a]'
+                : 'hover:bg-[#2a2a2a] text-[#888888] hover:text-[#e0e0e0]'
+            }`}
+            title={isMaximized ? "Restore" : "Maximize"}
+          >
+            {isMaximized ? (
+              <svg className="w-2.5 h-2.5" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.2">
+                <path d="M2.5 1.5H8.5V7.5" />
+                <rect x="1" y="2.5" width="6" height="6" />
+              </svg>
+            ) : (
+              <Square className="w-2.5 h-2.5" />
+            )}
+          </button>
+          <button
+            onClick={handleClose}
+            className="w-7 h-7 flex items-center justify-center hover:bg-[#e81123] text-[#888888] hover:text-white rounded transition-colors"
+            title="Close"
+          >
+            <X className="w-3 h-3" />
+          </button>
+        </div>
+      )}
     </header>
   );
 };

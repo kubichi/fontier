@@ -13,6 +13,10 @@ import {
   HardDrive,
   Trash2,
   Palette,
+  Monitor,
+  RefreshCw,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 import { FolderItem } from '../types';
 
@@ -35,6 +39,9 @@ interface SidebarProps {
   onCreateFolder: (name: string, color?: string) => void;
   onDeleteFolder: (folderId: string) => void;
   onChangeFolderColor?: (folderId: string, color: string) => void;
+  onMoveFolderUp?: (folderId: string) => void;
+  onMoveFolderDown?: (folderId: string) => void;
+  onRescanFolder?: (folderId: string) => void;
   counts: {
     all: number;
     recent: number;
@@ -44,11 +51,12 @@ interface SidebarProps {
     byFolder: Record<string, number>;
     google: number;
     local: number;
+    system?: number;
   };
   onOpenAddModal: () => void;
   onOpenLocalFolder: () => void;
   onOpenSettings?: () => void;
-  watchedFolder?: { name: string; count: number };
+  watchedFolder?: { name: string; count: number; id?: string };
   onRescanLocalFolder?: () => void;
   theme?: 'dark' | 'light';
 }
@@ -60,6 +68,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onCreateFolder,
   onDeleteFolder,
   onChangeFolderColor,
+  onMoveFolderUp,
+  onMoveFolderDown,
+  onRescanFolder,
   counts,
   onOpenAddModal,
   onOpenLocalFolder,
@@ -76,24 +87,33 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [newFolderColor, setNewFolderColor] = useState('#888888');
   const [showFolderInput, setShowFolderInput] = useState(false);
   const [activeColorPickerFolderId, setActiveColorPickerFolderId] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    folder: FolderItem;
+  } | null>(null);
 
   const isLight = theme === 'light';
   const colorPickerRef = useRef<HTMLDivElement>(null);
+  const contextMenuRef = useRef<HTMLDivElement>(null);
 
-  // Close color picker popup on outside click
+  // Close color picker and context menu on outside click
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (colorPickerRef.current && !colorPickerRef.current.contains(e.target as Node)) {
         setActiveColorPickerFolderId(null);
       }
+      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
+        setContextMenu(null);
+      }
     }
-    if (activeColorPickerFolderId) {
+    if (activeColorPickerFolderId || contextMenu) {
       document.addEventListener('mousedown', handleClickOutside);
     }
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [activeColorPickerFolderId]);
+  }, [activeColorPickerFolderId, contextMenu]);
 
   const handleCreateFolder = (e: React.FormEvent) => {
     e.preventDefault();
@@ -106,7 +126,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <aside
-      className={`border-r flex select-none shrink-0 h-full transition-all duration-150 ${
+      className={`border-r flex select-none shrink-0 h-full transition-[width] duration-150 overflow-hidden relative ${
         isLight
           ? 'bg-[#ffffff] border-[#e2e8f0] text-[#334155]'
           : 'bg-[#181818] border-[#262626] text-[#c8c8c8]'
@@ -114,7 +134,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     >
       {/* Mini leftmost icon rail */}
       <div
-        className={`w-11 border-r flex flex-col items-center py-2.5 space-y-3.5 shrink-0 ${
+        className={`w-11 border-r flex flex-col items-center py-2.5 space-y-3.5 shrink-0 z-10 ${
           isLight ? 'bg-[#f1f5f9] border-[#e2e8f0]' : 'bg-[#141414] border-[#222222]'
         }`}
       >
@@ -211,9 +231,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </button>
       </div>
 
-      {/* Main navigation list (Only rendered/visible when panel is open) */}
-      {isNavOpen && (
-        <div className="flex-1 flex flex-col justify-between overflow-hidden">
+      {/* Main navigation list (Fixed width prevents reflow and eliminates scrollbar flicker) */}
+      <div
+        className={`w-[212px] shrink-0 flex flex-col justify-between overflow-hidden transition-opacity duration-150 ${
+          isNavOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        }`}
+      >
           <div className="overflow-y-auto px-2 py-3 space-y-4 flex-1 text-xs">
             {/* Primary font filters */}
             <div className="space-y-0.5">
@@ -456,27 +479,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     </span>
                   </button>
 
-                  {watchedFolder && (
-                    <div
-                      className={`px-2 py-1 rounded mt-1 text-[10px] flex items-center justify-between border ${
-                        isLight
-                          ? 'bg-[#eff6ff] border-[#bfdbfe] text-[#1d4ed8]'
-                          : 'bg-[#1a2333]/40 border-[#25354d]/50 text-[#93c5fd]'
+                  <button
+                    onClick={() => onSelectFilter('provider-system')}
+                    className={`w-full flex items-center justify-between px-2 py-1.5 rounded text-left transition-colors ${
+                      currentFilter === 'provider-system'
+                        ? isLight
+                          ? 'bg-[#e2e8f0] text-[#0f172a]'
+                          : 'bg-[#2b2b2b] text-white'
+                        : isLight
+                        ? 'text-[#475569] hover:text-[#0f172a] hover:bg-[#f1f5f9]'
+                        : 'text-[#999999] hover:text-white hover:bg-[#222222]'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2 truncate">
+                      <Monitor className="w-3 h-3 text-[#38bdf8]" />
+                      <span className="truncate">Windows System</span>
+                    </div>
+                    <span
+                      className={`text-[10px] font-mono ${
+                        isLight ? 'text-[#94a3b8]' : 'text-[#777777]'
                       }`}
                     >
-                      <span className="truncate" title={watchedFolder.name}>
-                        {watchedFolder.name}
-                      </span>
-                      {onRescanLocalFolder && (
-                        <button
-                          onClick={onRescanLocalFolder}
-                          className="text-[#2563eb] hover:underline text-[9px] shrink-0 ml-1"
-                        >
-                          Rescan
-                        </button>
-                      )}
-                    </div>
-                  )}
+                      {counts.system ?? 0}
+                    </span>
+                  </button>
                 </div>
               )}
             </div>
@@ -574,10 +600,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
               {foldersOpen && (
                 <div className="mt-1 space-y-0.5 pl-1">
-                  {folders.map((folder) => {
+                  {folders.map((folder, index) => {
                     const isSelected = currentFilter === `folder-${folder.id}`;
                     const count = counts.byFolder[folder.id] || 0;
                     const folderColor = folder.color || '#888888';
+                    const isSystemFolder = ['pixel', 'serif', 'sans', 'display', 'mono', 'script'].includes(
+                      folder.id
+                    );
 
                     return (
                       <div
@@ -592,6 +621,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             : 'text-[#aaaaaa] hover:bg-[#222222] hover:text-white'
                         }`}
                         onClick={() => onSelectFilter(`folder-${folder.id}`)}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setContextMenu({ x: e.clientX, y: e.clientY, folder });
+                        }}
                       >
                         <div className="flex items-center space-x-2 truncate">
                           {/* Folder Icon with default gray color */}
@@ -602,7 +636,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           <span className="truncate">{folder.name}</span>
                         </div>
 
-                        <div className="flex items-center space-x-1.5">
+                        <div className="flex items-center space-x-1">
                           <span
                             className={`text-[10px] font-mono tabular-nums ${
                               isLight ? 'text-[#94a3b8]' : 'text-[#777777]'
@@ -610,6 +644,36 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           >
                             {count}
                           </span>
+
+                          {/* Quick reorder buttons */}
+                          {onMoveFolderUp && index > 0 && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onMoveFolderUp(folder.id);
+                              }}
+                              className={`opacity-0 group-hover:opacity-100 transition-opacity p-0.5 ${
+                                isLight ? 'text-[#94a3b8] hover:text-[#0f172a]' : 'text-[#777777] hover:text-white'
+                              }`}
+                              title="Move folder up"
+                            >
+                              <ArrowUp className="w-2.5 h-2.5" />
+                            </button>
+                          )}
+                          {onMoveFolderDown && index < folders.length - 1 && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onMoveFolderDown(folder.id);
+                              }}
+                              className={`opacity-0 group-hover:opacity-100 transition-opacity p-0.5 ${
+                                isLight ? 'text-[#94a3b8] hover:text-[#0f172a]' : 'text-[#777777] hover:text-white'
+                              }`}
+                              title="Move folder down"
+                            >
+                              <ArrowDown className="w-2.5 h-2.5" />
+                            </button>
+                          )}
 
                           {/* Color picker trigger for folder */}
                           <button
@@ -630,16 +694,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             />
                           </button>
 
+                          {/* Rescan folder action */}
+                          {onRescanFolder && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onRescanFolder(folder.id);
+                              }}
+                              className={`opacity-0 group-hover:opacity-100 transition-opacity p-0.5 ${
+                                isLight ? 'text-[#94a3b8] hover:text-[#2563eb]' : 'text-[#777777] hover:text-[#60a5fa]'
+                              }`}
+                              title="Rescan folder for new fonts"
+                            >
+                              <RefreshCw className="w-2.5 h-2.5" />
+                            </button>
+                          )}
+
                           {/* Option to delete custom folders */}
-                          {!['pixel', 'serif', 'sans', 'display', 'mono', 'script'].includes(
-                            folder.id
-                          ) && (
+                          {!isSystemFolder && (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 onDeleteFolder(folder.id);
                               }}
-                              className={`opacity-0 group-hover:opacity-100 text-[#ef4444] transition-opacity p-0.5`}
+                              className="opacity-0 group-hover:opacity-100 text-[#ef4444] transition-opacity p-0.5"
                               title="Delete folder"
                             >
                               <Trash2 className="w-3 h-3" />
@@ -718,6 +796,92 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <span>Import Fonts</span>
             </button>
           </div>
+        </div>
+
+      {/* Right-click Floating Context Menu for Folders */}
+      {contextMenu && (
+        <div
+          ref={contextMenuRef}
+          style={{
+            position: 'fixed',
+            left: `${contextMenu.x}px`,
+            top: `${contextMenu.y}px`,
+          }}
+          className={`z-50 w-44 rounded-md shadow-2xl py-1 border text-xs animate-in fade-in zoom-in-95 ${
+            isLight
+              ? 'bg-white border-[#cbd5e1] text-[#0f172a]'
+              : 'bg-[#1e1e1e] border-[#383838] text-[#e0e0e0]'
+          }`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="px-3 py-1 font-semibold border-b truncate text-[11px] opacity-70">
+            {contextMenu.folder.name}
+          </div>
+
+          {onRescanFolder && (
+            <button
+              onClick={() => {
+                onRescanFolder(contextMenu.folder.id);
+                setContextMenu(null);
+              }}
+              className={`w-full flex items-center px-3 py-1.5 space-x-2 text-left hover:bg-blue-600 hover:text-white transition-colors`}
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Rescan Folder</span>
+            </button>
+          )}
+
+          {onMoveFolderUp && (
+            <button
+              onClick={() => {
+                onMoveFolderUp(contextMenu.folder.id);
+                setContextMenu(null);
+              }}
+              className={`w-full flex items-center px-3 py-1.5 space-x-2 text-left hover:bg-blue-600 hover:text-white transition-colors`}
+            >
+              <ArrowUp className="w-3.5 h-3.5" />
+              <span>Move Up</span>
+            </button>
+          )}
+
+          {onMoveFolderDown && (
+            <button
+              onClick={() => {
+                onMoveFolderDown(contextMenu.folder.id);
+                setContextMenu(null);
+              }}
+              className={`w-full flex items-center px-3 py-1.5 space-x-2 text-left hover:bg-blue-600 hover:text-white transition-colors`}
+            >
+              <ArrowDown className="w-3.5 h-3.5" />
+              <span>Move Down</span>
+            </button>
+          )}
+
+          <button
+            onClick={() => {
+              setActiveColorPickerFolderId(contextMenu.folder.id);
+              setContextMenu(null);
+            }}
+            className={`w-full flex items-center px-3 py-1.5 space-x-2 text-left hover:bg-blue-600 hover:text-white transition-colors`}
+          >
+            <Palette className="w-3.5 h-3.5" />
+            <span>Change Color</span>
+          </button>
+
+          {!['pixel', 'serif', 'sans', 'display', 'mono', 'script'].includes(
+            contextMenu.folder.id
+          ) && (
+            <button
+              onClick={() => {
+                onDeleteFolder(contextMenu.folder.id);
+                setContextMenu(null);
+              }}
+              className={`w-full flex items-center px-3 py-1.5 space-x-2 text-left text-[#ef4444] hover:bg-[#ef4444] hover:text-white transition-colors border-t mt-1`}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Delete Folder</span>
+            </button>
+          )}
         </div>
       )}
     </aside>
