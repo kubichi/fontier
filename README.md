@@ -20,6 +20,12 @@
 
 ---
 
+<p align="center">
+  <img src="public/showcase.png" alt="Fontier Interface Showcase" width="100%" />
+</p>
+
+---
+
 ## Features
 
 - **Performance Isn't As Bad As Other Electron Apps. I think.**
