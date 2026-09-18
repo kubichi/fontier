@@ -179,8 +179,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             className={`h-full px-2 rounded transition-colors flex items-center justify-center ${
               alignment === 'left'
                 ? isLight
-                  ? 'bg-white text-[#16a34a] shadow-xs'
-                  : 'bg-[#333333] text-[#4ade80] shadow-xs'
+                  ? 'bg-white text-accent shadow-xs'
+                  : 'bg-[#333333] text-accent shadow-xs'
                 : isLight
                 ? 'text-[#64748b] hover:text-[#0f172a]'
                 : 'text-[#888888] hover:text-[#cccccc]'
@@ -195,8 +195,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             className={`h-full px-2 rounded transition-colors flex items-center justify-center ${
               alignment === 'center'
                 ? isLight
-                  ? 'bg-white text-[#16a34a] shadow-xs'
-                  : 'bg-[#333333] text-[#4ade80] shadow-xs'
+                  ? 'bg-white text-accent shadow-xs'
+                  : 'bg-[#333333] text-accent shadow-xs'
                 : isLight
                 ? 'text-[#64748b] hover:text-[#0f172a]'
                 : 'text-[#888888] hover:text-[#cccccc]'
@@ -211,8 +211,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             className={`h-full px-2 rounded transition-colors flex items-center justify-center ${
               alignment === 'right'
                 ? isLight
-                  ? 'bg-white text-[#16a34a] shadow-xs'
-                  : 'bg-[#333333] text-[#4ade80] shadow-xs'
+                  ? 'bg-white text-accent shadow-xs'
+                  : 'bg-[#333333] text-accent shadow-xs'
                 : isLight
                 ? 'text-[#64748b] hover:text-[#0f172a]'
                 : 'text-[#888888] hover:text-[#cccccc]'
@@ -231,8 +231,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             className={`h-7 flex items-center px-2 rounded border transition-colors ${
               showColorPopover
                 ? isLight
-                  ? 'border-[#16a34a] bg-[#f8fafc]'
-                  : 'border-[#4ade80] bg-[#292929]'
+                  ? 'border-accent bg-[#f8fafc]'
+                  : 'border-accent bg-[#292929]'
                 : isLight
                 ? 'bg-[#f1f5f9] hover:bg-[#e2e8f0] border-[#cbd5e1]'
                 : 'bg-[#222222] hover:bg-[#292929] border-[#333333]'
@@ -295,7 +295,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                     </>
                   ) : (
                     <>
-                      <Moon className="w-3 h-3 text-[#0284c7]" />
+                      <Moon className="w-3 h-3 text-accent" />
                       <span className="text-[11px] font-medium">Dark</span>
                     </>
                   )}
@@ -306,7 +306,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
               <div className="mb-3">
                 <label className="text-[11px] flex items-center justify-between mb-1">
                   <span className="flex items-center gap-1">
-                    <Type className="w-3 h-3 text-[#0284c7]" />
+                    <Type className="w-3 h-3 text-accent" />
                     Text Color
                   </span>
                   <span className="font-mono text-[10px] text-[#888888]">{textColor}</span>
@@ -425,11 +425,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                   <button
                     type="button"
                     onClick={handleSaveCurrentAsPreset}
-                    className={`h-7 rounded border border-dashed flex items-center justify-center transition-all hover:scale-[1.03] hover:z-10 ${
-                      isLight
-                        ? 'border-[#94a3b8] hover:border-[#16a34a] hover:bg-[#dcfce7]/50 text-[#64748b] hover:text-[#16a34a]'
-                        : 'border-[#444444] hover:border-[#4ade80] hover:bg-[#222e25]/60 text-[#888888] hover:text-[#4ade80]'
-                    }`}
+                    className="h-7 rounded border border-dashed border-neutral-500 hover:border-accent hover:bg-accent-subtle text-neutral-400 hover:text-accent flex items-center justify-center transition-all hover:scale-[1.03] hover:z-10"
                     title={`Add current colors (${textColor} on ${bgColor}) to presets`}
                   >
                     <Plus className="w-3.5 h-3.5" />
@@ -452,7 +448,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             step="1"
             value={fontSize}
             onChange={(e) => onFontSizeChange(Number(e.target.value))}
-            className={`w-28 sm:w-40 h-1.5 rounded-lg appearance-none cursor-pointer accent-[#16a34a] ${
+            style={{ accentColor: 'var(--accent-color, #38bdf8)' }}
+            className={`w-28 sm:w-40 h-1.5 rounded-lg appearance-none cursor-pointer ${
               isLight ? 'bg-[#cbd5e1]' : 'bg-[#333333]'
             }`}
           />
@@ -484,9 +481,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             onClick={onToggleInspector}
             className={`flex items-center space-x-1 px-2 py-1 text-xs rounded transition-colors border ${
               showInspector
-                ? isLight
-                  ? 'bg-[#dcfce7] text-[#15803d] border-[#86efac]'
-                  : 'bg-[#2b2b2b] text-[#4ade80] border-[#3f3f3f]'
+                ? 'bg-accent-subtle text-accent border-accent-subtle'
                 : isLight
                 ? 'text-[#64748b] hover:text-[#0f172a] border-transparent hover:bg-[#f1f5f9]'
                 : 'text-[#888888] hover:text-[#dddddd] border-transparent hover:bg-[#252525]'

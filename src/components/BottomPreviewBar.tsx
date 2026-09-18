@@ -43,8 +43,8 @@ export const BottomPreviewBar: React.FC<BottomPreviewBarProps> = ({
       <div
         className={`flex-1 flex items-center rounded h-8 px-3 transition-colors border ${
           isLight
-            ? 'bg-[#f8fafc] hover:bg-[#f1f5f9] focus-within:bg-white border-[#cbd5e1] focus-within:border-[#16a34a]'
-            : 'bg-[#222222] hover:bg-[#252525] focus-within:bg-[#262626] border-[#333333] focus-within:border-[#4ade80]'
+            ? 'bg-[#f8fafc] hover:bg-[#f1f5f9] focus-within:bg-white border-[#cbd5e1] focus-within:border-accent'
+            : 'bg-[#222222] hover:bg-[#252525] focus-within:bg-[#262626] border-[#333333] focus-within:border-accent'
         }`}
       >
         <input

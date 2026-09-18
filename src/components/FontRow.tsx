@@ -1,7 +1,7 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { Heart, ChevronRight, Check, Info } from 'lucide-react';
 import { FontItem, TextAlignment, ViewMode } from '../types';
-import { ensureFontLoaded } from '../utils/fontStorage';
+import { ensureFontLoaded, unregisterFont } from '../utils/fontStorage';
 
 interface FontRowProps {
   font: FontItem;
@@ -28,7 +28,7 @@ export const FontRow: React.FC<FontRowProps> = React.memo(({
   bgColor,
   alignment,
   viewMode,
-  isSelected,
+  isSelected = false,
   isCompact = false,
   onSelectFont,
   onToggleActive,
@@ -51,6 +51,54 @@ export const FontRow: React.FC<FontRowProps> = React.memo(({
       ? 'text-right'
       : 'text-left';
 
+  const isolatedFontFamily = useMemo(() => {
+    return font.fontFamily.split(',')[0].trim();
+  }, [font.fontFamily]);
+
+  const gridDisplayGlyphs = useMemo(() => {
+    if (font.supportedCodepoints && font.supportedCodepoints.length > 0) {
+      if (font.supportedCodepoints.includes(65) || font.supportedCodepoints.includes(97)) {
+        return 'Aa';
+      }
+      const validCps = font.supportedCodepoints.filter((cp) => (cp >= 33 && cp < 127) || cp >= 160);
+      if (validCps.length >= 2) {
+        return String.fromCodePoint(validCps[0], validCps[1]);
+      } else if (validCps.length === 1) {
+        return String.fromCodePoint(validCps[0]);
+      }
+    }
+    return 'Aa';
+  }, [font.supportedCodepoints]);
+
+  const rowPreviewText = useMemo(() => {
+    // If font has known supported codepoints, check if it supports the Latin alphabet
+    if (font.supportedCodepoints && font.supportedCodepoints.length > 0) {
+      const hasLatin = font.supportedCodepoints.some((cp) => (cp >= 65 && cp <= 90) || (cp >= 97 && cp <= 122));
+      if (!hasLatin) {
+        // Font does NOT support standard Latin alphabet (e.g., MiTypeClock, number/clock fonts, math, symbols)
+        if (previewText) {
+          const supportedChars = Array.from(previewText).filter((ch) => {
+            const code = ch.codePointAt(0);
+            return code !== undefined && font.supportedCodepoints!.includes(code);
+          });
+          // If the user entered custom text with characters supported by the font (e.g. "12:00" or "+ -"), show them
+          if (supportedChars.length > 0 && supportedChars.length >= previewText.replace(/\s+/g, '').length * 0.35) {
+            return supportedChars.join('');
+          }
+        }
+        // Otherwise, never display fallback Times New Roman / Arial letters; display the font's actual glyphs!
+        const sample = font.supportedCodepoints
+          .filter((cp) => (cp >= 33 && cp < 127) || cp >= 160)
+          .slice(0, 24)
+          .map((cp) => String.fromCodePoint(cp))
+          .join(' ');
+        if (sample) return sample;
+        return '—';
+      }
+    }
+    if (previewText) return previewText;
+    return font.name;
+  }, [previewText, font.name, font.supportedCodepoints]);
 
   if (viewMode === 'grid') {
     return (
@@ -62,9 +110,9 @@ export const FontRow: React.FC<FontRowProps> = React.memo(({
         }}
         className={`relative aspect-square p-3 flex flex-col items-center justify-between rounded-lg border transition-all cursor-pointer group ${
           isLight
-            ? 'bg-white hover:bg-gray-50 border-gray-200 hover:border-[#16a34a]/50'
-            : 'bg-[#1d1d1d] hover:bg-[#252525] border-[#2a2a2a] hover:border-[#4ade80]/50'
-        } ${isSelected ? (isLight ? 'ring-2 ring-[#16a34a]/30' : 'ring-1 ring-[#4ade80]/30') : ''}`}
+            ? 'bg-white hover:bg-gray-50 border-gray-200 hover:border-accent'
+            : 'bg-[#1d1d1d] hover:bg-[#252525] border-[#2a2a2a] hover:border-accent'
+        } ${isSelected ? 'ring-2 ring-accent' : ''}`}
         title={font.name}
       >
         {font.active && (
@@ -75,11 +123,12 @@ export const FontRow: React.FC<FontRowProps> = React.memo(({
           <span
             className="text-4xl select-none transition-transform group-hover:scale-105"
             style={{
-              fontFamily: font.fontFamily,
+              fontFamily: isolatedFontFamily,
               color: textColor,
+              fontSynthesis: 'none',
             }}
           >
-            Aa
+            {gridDisplayGlyphs}
           </span>
         </div>
 
@@ -99,13 +148,14 @@ export const FontRow: React.FC<FontRowProps> = React.memo(({
   return (
     <div
       onClick={() => onSelectFont?.(font)}
+      style={{ minHeight: isCompact ? '68px' : '96px' }}
       className={`border-b transition-colors group cursor-pointer ${
         isLight
           ? isSelected
-            ? 'bg-[#f0fdf4] border-[#86efac] ring-1 ring-inset ring-[#16a34a]/30'
+            ? 'bg-accent-subtle border-accent ring-1 ring-inset ring-accent'
             : 'border-[#f1f5f9] hover:bg-[#f8fafc]'
           : isSelected
-          ? 'bg-[#22272e] border-[#3b82f6]/60 ring-1 ring-inset ring-[#3b82f6]/30'
+          ? 'bg-accent-subtle border-accent ring-1 ring-inset ring-accent'
           : 'border-[#262626] hover:bg-[#202020]/50'
       }`}
     >
@@ -142,8 +192,8 @@ export const FontRow: React.FC<FontRowProps> = React.memo(({
             }}
             className={`font-medium cursor-pointer ${
               isLight
-                ? 'text-[#0f172a] hover:text-[#16a34a]'
-                : 'text-[#d8d8d8] hover:text-[#4ade80]'
+                ? 'text-[#0f172a] hover:text-accent'
+                : 'text-[#d8d8d8] hover:text-accent'
             }`}
           >
             {font.name}
@@ -156,11 +206,6 @@ export const FontRow: React.FC<FontRowProps> = React.memo(({
             }`}
           >
             {font.format}
-          </span>
-
-          {/* Number of styles */}
-          <span className={`text-[11px] ${isLight ? 'text-[#64748b]' : 'text-[#777777]'}`}>
-            {font.stylesCount} {font.stylesCount === 1 ? 'style' : 'styles'}
           </span>
 
           {/* System Tags preview (e.g. Mono, Bold, Italic) */}
@@ -189,28 +234,6 @@ export const FontRow: React.FC<FontRowProps> = React.memo(({
               )}
             </div>
           )}
-
-          {/* Version preview if available */}
-          {font.version && (
-            <span
-              className={`text-[10px] font-mono hidden md:inline truncate max-w-[120px] ${
-                isLight ? 'text-[#94a3b8]' : 'text-[#666666]'
-              }`}
-            >
-              {font.version.split(';')[0]}
-            </span>
-          )}
-
-          {/* View link */}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpenDetail(font);
-            }}
-            className="text-[11px] text-[#0284c7] hover:underline cursor-pointer ml-1"
-          >
-            Alphabets
-          </button>
         </div>
 
         {/* Right side row controls */}
@@ -223,9 +246,7 @@ export const FontRow: React.FC<FontRowProps> = React.memo(({
             }}
             className={`p-1 rounded transition-colors text-xs flex items-center space-x-1 ${
               isSelected
-                ? isLight
-                  ? 'bg-[#dbeafe] text-[#0284c7]'
-                  : 'bg-[#3b82f6]/20 text-[#38bdf8]'
+                ? 'bg-accent-subtle text-accent'
                 : isLight
                 ? 'text-[#64748b] hover:text-[#0f172a] hover:bg-[#e2e8f0]'
                 : 'text-[#666666] hover:text-[#cccccc] hover:bg-[#252525]'
@@ -268,18 +289,18 @@ export const FontRow: React.FC<FontRowProps> = React.memo(({
         }}
         className={`${
           isCompact ? 'px-3 py-1.5 mx-2 my-0.5' : 'px-4 py-3 mx-3 my-1.5'
-        } rounded-sm cursor-pointer hover:ring-1 hover:ring-[#3b82f6]/50 transition-all select-text`}
+        } rounded-sm cursor-pointer hover:ring-1 hover:ring-accent transition-all select-text`}
         title="Click to open page with full alphabet & glyphs"
       >
         <p
           className={`overflow-x-auto whitespace-pre-wrap leading-tight tracking-normal ${alignClass}`}
           style={{
-            fontFamily: font.fontFamily,
+            fontFamily: isolatedFontFamily,
             color: textColor,
             fontSize: `${isCompact ? Math.max(14, Math.round(fontSize * 0.88)) : fontSize}px`,
           }}
         >
-          {previewText || font.name}
+          {rowPreviewText}
         </p>
       </div>
     </div>

@@ -56,7 +56,18 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   const searchContainerRef = useRef<HTMLDivElement>(null);
   const isLight = theme === 'light';
 
-  const [platform, setPlatform] = useState<string>('win32');
+  const [platform, setPlatform] = useState<string>(() => {
+    if (typeof window !== 'undefined' && (window as any).electronAPI?.platform) {
+      return (window as any).electronAPI.platform;
+    }
+    if (typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.userAgent || navigator.platform)) {
+      return 'darwin';
+    }
+    if (typeof navigator !== 'undefined' && /Linux/.test(navigator.userAgent || navigator.platform)) {
+      return 'linux';
+    }
+    return 'win32';
+  });
   useEffect(() => {
     const api = (window as any).electronAPI || (window as any).electron;
     if (typeof window !== 'undefined' && api?.getPlatform) {
@@ -64,6 +75,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
     }
   }, []);
   const isMac = platform === 'darwin';
+  const isLinux = platform === 'linux';
 
   const [searchHistory, setSearchHistory] = useState<string[]>(() => {
     try {
@@ -209,8 +221,8 @@ export const TitleBar: React.FC<TitleBarProps> = ({
             placeholder="Search fonts by name, designer, format..."
             className={`w-full h-7 pl-8 pr-16 text-xs rounded-md border focus:outline-none transition-all ${
               isLight
-                ? 'bg-[#ffffff] hover:bg-[#f8fafc] focus:bg-[#ffffff] text-[#0f172a] placeholder-[#94a3b8] border-[#cbd5e1] focus:border-[#22c55e]'
-                : 'bg-[#202020] hover:bg-[#252525] focus:bg-[#272727] text-[#e0e0e0] placeholder-[#666666] border-[#303030] focus:border-[#4ade80]'
+                ? 'bg-[#ffffff] hover:bg-[#f8fafc] focus:bg-[#ffffff] text-[#0f172a] placeholder-[#94a3b8] border-[#cbd5e1] focus:border-accent'
+                : 'bg-[#202020] hover:bg-[#252525] focus:bg-[#272727] text-[#e0e0e0] placeholder-[#666666] border-[#303030] focus:border-accent'
             }`}
           />
 
@@ -233,9 +245,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
               onClick={() => setShowFilterMenu((prev) => !prev)}
               className={`p-1 rounded transition-colors relative ${
                 hasActiveFilters
-                  ? isLight
-                    ? 'text-[#16a34a] bg-[#dcfce7] ring-1 ring-[#16a34a]/30'
-                    : 'text-[#4ade80] bg-[#223326]'
+                  ? 'text-accent bg-accent-subtle ring-1 ring-accent'
                   : isLight
                   ? 'text-[#64748b] hover:text-[#0f172a] hover:bg-[#e2e8f0]'
                   : 'text-[#888888] hover:text-[#e0e0e0] hover:bg-[#2c2c2c]'
@@ -245,9 +255,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
               <SlidersHorizontal className="w-3.5 h-3.5" />
               {hasActiveFilters && (
                 <span
-                  className={`absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full ${
-                    isLight ? 'bg-[#16a34a]' : 'bg-[#4ade80]'
-                  }`}
+                  className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-accent"
                 />
               )}
             </button>
@@ -328,7 +336,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
               {hasActiveFilters && (
                 <button
                   onClick={onResetFilters}
-                  className="text-[11px] text-[#0284c7] hover:underline flex items-center gap-1"
+                  className="text-[11px] text-accent hover:underline flex items-center gap-1"
                 >
                   <RotateCcw className="w-3 h-3" />
                   <span>Reset filters</span>
@@ -353,9 +361,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
                     onClick={() => onUpdateFilters({ category: cat })}
                     className={`px-2 py-0.5 rounded text-[11px] border transition-colors ${
                       filters.category === cat
-                        ? isLight
-                          ? 'bg-[#dcfce7] border-[#22c55e] text-[#15803d] font-semibold'
-                          : 'bg-[#2b3b2f] border-[#4ade80] text-white font-medium'
+                        ? 'bg-accent-subtle border-accent text-accent font-semibold'
                         : isLight
                         ? 'bg-[#f1f5f9] border-[#e2e8f0] text-[#475569] hover:text-[#0f172a] hover:bg-[#e2e8f0]'
                         : 'bg-[#252525] border-[#333333] text-[#aaaaaa] hover:text-white hover:bg-[#2d2d2d]'
@@ -386,9 +392,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
                       onClick={() => onUpdateFilters({ format: fmt.value })}
                       className={`px-2 py-0.5 rounded text-[11px] font-mono border transition-colors ${
                         isSelected
-                          ? isLight
-                            ? 'bg-[#dcfce7] border-[#22c55e] text-[#15803d] font-semibold'
-                            : 'bg-[#2b3b2f] border-[#4ade80] text-white font-medium'
+                          ? 'bg-accent-subtle border-accent text-accent font-semibold'
                           : isLight
                           ? 'bg-[#f1f5f9] border-[#e2e8f0] text-[#475569] hover:text-[#0f172a] hover:bg-[#e2e8f0]'
                           : 'bg-[#252525] border-[#333333] text-[#aaaaaa] hover:text-white hover:bg-[#2d2d2d]'
@@ -424,8 +428,8 @@ export const TitleBar: React.FC<TitleBarProps> = ({
                   }
                   className={`w-full text-xs rounded px-2 py-1 focus:outline-none border ${
                     isLight
-                      ? 'bg-[#f8fafc] text-[#0f172a] border-[#cbd5e1] focus:border-[#22c55e]'
-                      : 'bg-[#242424] text-[#dddddd] border-[#383838] focus:border-[#4ade80]'
+                      ? 'bg-[#f8fafc] text-[#0f172a] border-[#cbd5e1] focus:border-accent'
+                      : 'bg-[#242424] text-[#dddddd] border-[#383838] focus:border-accent'
                   }`}
                 >
                   <option value="all">All Fonts</option>
@@ -452,8 +456,8 @@ export const TitleBar: React.FC<TitleBarProps> = ({
                   }
                   className={`w-full text-xs rounded px-2 py-1 focus:outline-none border ${
                     isLight
-                      ? 'bg-[#f8fafc] text-[#0f172a] border-[#cbd5e1] focus:border-[#22c55e]'
-                      : 'bg-[#242424] text-[#dddddd] border-[#383838] focus:border-[#4ade80]'
+                      ? 'bg-[#f8fafc] text-[#0f172a] border-[#cbd5e1] focus:border-accent'
+                      : 'bg-[#242424] text-[#dddddd] border-[#383838] focus:border-accent'
                   }`}
                 >
                   <option value="all">All Sources</option>
@@ -467,8 +471,8 @@ export const TitleBar: React.FC<TitleBarProps> = ({
         )}
       </div>
 
-      {/* Right section: Window Chrome */}
-      {!isMac && showControls && (
+      {/* Right section: Window Chrome (Windows only) */}
+      {!isMac && !isLinux && showControls && (
         <div className="flex items-center space-x-1 app-no-drag">
           <button
             onClick={handleMinimize}

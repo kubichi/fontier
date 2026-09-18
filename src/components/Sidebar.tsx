@@ -220,11 +220,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {/* Hamburger Menu Toggle Button */}
           <button
             onClick={() => setIsNavOpen(true)}
-            className={`p-1.5 rounded transition-colors ${
-              isLight
-                ? 'text-[#16a34a] bg-[#dcfce7]'
-                : 'text-[#4ade80] bg-[#1e2e22]'
-            }`}
+            className="p-1.5 rounded transition-colors text-accent bg-accent-subtle"
             title="Expand navigation panel"
           >
             <Menu className="w-4 h-4" />
@@ -238,9 +234,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           }}
           className={`p-1.5 rounded transition-colors ${
             currentFilter === 'all'
-              ? isLight
-                ? 'text-[#16a34a] bg-[#dcfce7]'
-                : 'text-[#4ade80] bg-[#1e2e22]'
+              ? 'text-accent bg-accent-subtle'
               : isLight
               ? 'text-[#64748b] hover:text-[#0f172a] hover:bg-[#e2e8f0]'
               : 'text-[#888888] hover:text-white hover:bg-[#202020]'
@@ -544,7 +538,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     }`}
                   >
                     <div className="flex items-center space-x-2 truncate">
-                      <span className="w-2 h-2 rounded-full bg-[#22c55e]" />
+                      <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24">
+                        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"/>
+                        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335"/>
+                      </svg>
                       <span className="truncate">Google Fonts</span>
                     </div>
                     <span
@@ -569,7 +568,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     }`}
                   >
                     <div className="flex items-center space-x-2 truncate">
-                      <HardDrive className="w-3 h-3 text-[#3b82f6]" />
+                      <HardDrive className="w-3 h-3 text-accent" />
                       <span className="truncate">Local Fonts</span>
                     </div>
                     <span
@@ -594,7 +593,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     }`}
                   >
                     <div className="flex items-center space-x-2 truncate">
-                      <Monitor className="w-3 h-3 text-[#38bdf8]" />
+                      <Monitor className="w-3 h-3 text-accent" />
                       <span className="truncate">Windows System</span>
                     </div>
                     <span
@@ -639,7 +638,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     }}
                     className={`transition-colors p-0.5 rounded text-[10px] px-1 font-normal ${
                       isSelectionMode
-                        ? 'bg-blue-600 text-white'
+                        ? 'bg-accent text-white'
                         : isLight
                         ? 'text-[#64748b] hover:text-[#0f172a] hover:bg-slate-200'
                         : 'text-[#888888] hover:text-white hover:bg-neutral-800'
@@ -651,11 +650,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
                   <button
                     onClick={onOpenLocalFolder}
-                    className={`transition-colors p-0.5 ${
-                      isLight
-                        ? 'text-[#64748b] hover:text-[#0284c7]'
-                        : 'text-[#888888] hover:text-[#38bdf8]'
-                    }`}
+                    className="transition-colors p-0.5 text-[#888888] hover:text-accent"
                     title="Open local font folder (with subfolders)"
                   >
                     <HardDrive className="w-3.5 h-3.5" />
@@ -663,11 +658,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
                   <button
                     onClick={() => setShowFolderInput(true)}
-                    className={`transition-colors p-0.5 ${
-                      isLight
-                        ? 'text-[#64748b] hover:text-[#16a34a]'
-                        : 'text-[#888888] hover:text-[#4ade80]'
-                    }`}
+                    className="transition-colors p-0.5 text-[#888888] hover:text-accent"
                     title="Create new folder"
                   >
                     <FolderPlus className="w-3.5 h-3.5" />
@@ -746,8 +737,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       placeholder="Folder name..."
                       className={`w-full rounded px-2 py-1 text-xs focus:outline-none border ${
                         isLight
-                          ? 'bg-[#f8fafc] border-[#cbd5e1] text-[#0f172a] focus:border-[#16a34a]'
-                          : 'bg-[#202020] border-[#404040] text-white focus:border-[#4ade80]'
+                          ? 'bg-[#f8fafc] border-[#cbd5e1] text-[#0f172a] focus:border-accent'
+                          : 'bg-[#202020] border-[#404040] text-white focus:border-accent'
                       }`}
                       onKeyDown={(e) => {
                         if (e.key === 'Escape') setShowFolderInput(false);
@@ -1051,7 +1042,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   : 'bg-[#242424] hover:bg-[#2c2c2c] active:bg-[#1f1f1f] text-[#dddddd] hover:text-white border-[#353535]'
               }`}
             >
-              <Plus className="w-3.5 h-3.5 text-[#16a34a]" />
+              <Plus className="w-3.5 h-3.5 text-accent" />
               <span>Import Fonts</span>
             </button>
           </div>
@@ -1074,18 +1065,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div
             className={`w-[2px] h-full transition-colors duration-150 pointer-events-none ${
               isResizing
-                ? 'bg-[#3b82f6] shadow-[0_0_8px_rgba(59,130,246,0.8)]'
-                : 'bg-transparent group-hover:bg-[#3b82f6]/70'
+                ? 'bg-accent shadow-[0_0_8px_var(--accent-color,#3b82f6)]'
+                : 'bg-transparent group-hover:bg-accent/70'
             }`}
           />
           {/* Visible Center Grab Handle / Scaler Pill */}
           <div
             className={`absolute w-1.5 h-14 rounded-full transition-all duration-150 shadow-md flex flex-col items-center justify-center space-y-1 pointer-events-none ${
               isResizing
-                ? 'bg-[#3b82f6] h-20 w-2 scale-110 shadow-lg ring-2 ring-blue-400/40'
+                ? 'bg-accent h-20 w-2 scale-110 shadow-lg ring-2 ring-accent/40'
                 : isLight
-                ? 'bg-[#cbd5e1] group-hover:bg-[#3b82f6] group-hover:h-20 group-hover:w-2'
-                : 'bg-[#444444] group-hover:bg-[#3b82f6] group-hover:h-20 group-hover:w-2'
+                ? 'bg-[#cbd5e1] group-hover:bg-accent group-hover:h-20 group-hover:w-2'
+                : 'bg-[#444444] group-hover:bg-accent group-hover:h-20 group-hover:w-2'
             }`}
           >
             <span className="w-0.5 h-0.5 rounded-full bg-white/70" />

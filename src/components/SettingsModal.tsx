@@ -1,6 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { X, Moon, Sun, RotateCcw, Check, Sparkles } from 'lucide-react';
+import { X, Moon, Sun, RotateCcw, Check, Sparkles, Palette } from 'lucide-react';
 import { AppSettings } from '../types';
+
+const ACCENT_PRESETS = [
+  { name: 'Sky Blue (Default)', color: '#38bdf8' },
+  { name: 'Ocean Blue', color: '#0284c7' },
+  { name: 'Royal Blue', color: '#2563eb' },
+  { name: 'Indigo', color: '#6366f1' },
+  { name: 'Purple', color: '#a855f7' },
+  { name: 'Rose', color: '#f43f5e' },
+  { name: 'Emerald', color: '#10b981' },
+  { name: 'Amber', color: '#f59e0b' },
+  { name: 'Cyan', color: '#06b6d4' },
+];
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -48,7 +60,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           }`}
         >
           <div className="flex items-center space-x-2">
-            <span className="w-2 h-2 rounded-full bg-[#16a34a]" />
+            <span className="w-2 h-2 rounded-full bg-accent" />
             <h2 className={`text-sm font-semibold tracking-tight ${isLight ? 'text-[#0f172a]' : 'text-white'}`}>
               Preferences & Settings
             </h2>
@@ -85,14 +97,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 onClick={() => onUpdateSettings({ appTheme: 'dark' })}
                 className={`p-3.5 rounded-lg border text-left flex flex-col justify-between transition-all relative ${
                   !isLight
-                    ? 'border-[#16a34a] bg-[#1a2e20] text-white ring-1 ring-[#16a34a]'
+                    ? 'border-accent bg-accent-subtle text-white ring-1 ring-accent'
                     : isLight
                     ? 'border-[#e2e8f0] bg-[#f8fafc] hover:bg-[#f1f5f9] text-[#475569]'
                     : 'border-[#2d2d2d] bg-[#161616] hover:bg-[#202020] text-[#aaaaaa]'
                 }`}
               >
                 {!isLight && (
-                  <span className="absolute top-2 right-2 w-4 h-4 rounded-full bg-[#16a34a] text-white flex items-center justify-center">
+                  <span className="absolute top-2 right-2 w-4 h-4 rounded-full bg-accent text-white flex items-center justify-center">
                     <Check className="w-2.5 h-2.5" />
                   </span>
                 )}
@@ -112,12 +124,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 onClick={() => onUpdateSettings({ appTheme: 'light' })}
                 className={`p-3.5 rounded-lg border text-left flex flex-col justify-between transition-all relative ${
                   isLight
-                    ? 'border-[#16a34a] bg-[#f0fdf4] text-[#0f172a] ring-1 ring-[#16a34a]'
+                    ? 'border-accent bg-accent-subtle text-[#0f172a] ring-1 ring-accent'
                     : 'border-[#2d2d2d] bg-[#161616] hover:bg-[#202020] text-[#aaaaaa]'
                 }`}
               >
                 {isLight && (
-                  <span className="absolute top-2 right-2 w-4 h-4 rounded-full bg-[#16a34a] text-white flex items-center justify-center">
+                  <span className="absolute top-2 right-2 w-4 h-4 rounded-full bg-accent text-white flex items-center justify-center">
                     <Check className="w-2.5 h-2.5" />
                   </span>
                 )}
@@ -138,6 +150,55 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           </div>
 
+          {/* Custom Accent Color */}
+          <div className={`space-y-2 pt-2 border-t ${isLight ? 'border-[#e2e8f0]' : 'border-[#292929]'}`}>
+            <div className="flex items-center justify-between">
+              <label
+                className={`text-[11px] font-semibold uppercase tracking-wider block ${
+                  isLight ? 'text-[#64748b]' : 'text-[#888888]'
+                }`}
+              >
+                Accent Color
+              </label>
+              <div className="flex items-center space-x-1.5">
+                <span className="text-[10px] text-[#888888] font-mono">
+                  {settings.customAccentColor || '#38bdf8'}
+                </span>
+                <label className="relative cursor-pointer w-5 h-5 rounded-full border border-white/20 overflow-hidden shrink-0 shadow-xs" title="Custom color picker">
+                  <input
+                    type="color"
+                    value={settings.customAccentColor || '#38bdf8'}
+                    onChange={(e) => onUpdateSettings({ customAccentColor: e.target.value })}
+                    className="absolute -inset-1 opacity-0 cursor-pointer w-7 h-7"
+                  />
+                  <span
+                    className="block w-full h-full"
+                    style={{ backgroundColor: settings.customAccentColor || '#38bdf8' }}
+                  />
+                </label>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2 pt-1">
+              {ACCENT_PRESETS.map((preset) => {
+                const isSelected = (settings.customAccentColor || '#38bdf8').toLowerCase() === preset.color.toLowerCase();
+                return (
+                  <button
+                    key={preset.color}
+                    type="button"
+                    onClick={() => onUpdateSettings({ customAccentColor: preset.color })}
+                    className={`w-7 h-7 rounded-full flex items-center justify-center transition-transform ${
+                      isSelected ? 'scale-110 ring-2 ring-white/60 shadow-md' : 'hover:scale-105 opacity-80 hover:opacity-100'
+                    }`}
+                    style={{ backgroundColor: preset.color }}
+                    title={preset.name}
+                  >
+                    {isSelected && <Check className="w-3.5 h-3.5 text-white stroke-[3]" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Row Density */}
           <div className={`space-y-2 pt-2 border-t ${isLight ? 'border-[#e2e8f0]' : 'border-[#292929]'}`}>
             <label
@@ -153,9 +214,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 onClick={() => onUpdateSettings({ rowDensity: 'comfortable' })}
                 className={`flex-1 py-2 px-3 rounded-md border text-center transition-colors ${
                   settings.rowDensity === 'comfortable'
-                    ? isLight
-                      ? 'border-[#16a34a] bg-[#dcfce7] text-[#15803d] font-semibold'
-                      : 'border-[#4ade80] bg-[#222e25] text-white font-medium'
+                    ? 'border-accent bg-accent-subtle text-accent font-semibold'
                     : isLight
                     ? 'border-[#cbd5e1] bg-[#f8fafc] text-[#475569] hover:bg-[#f1f5f9]'
                     : 'border-[#2e2e2e] bg-[#161616] text-[#aaaaaa] hover:bg-[#222222]'
@@ -168,9 +227,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 onClick={() => onUpdateSettings({ rowDensity: 'compact' })}
                 className={`flex-1 py-2 px-3 rounded-md border text-center transition-colors ${
                   settings.rowDensity === 'compact'
-                    ? isLight
-                      ? 'border-[#16a34a] bg-[#dcfce7] text-[#15803d] font-semibold'
-                      : 'border-[#4ade80] bg-[#222e25] text-white font-medium'
+                    ? 'border-accent bg-accent-subtle text-accent font-semibold'
                     : isLight
                     ? 'border-[#cbd5e1] bg-[#f8fafc] text-[#475569] hover:bg-[#f1f5f9]'
                     : 'border-[#2e2e2e] bg-[#161616] text-[#aaaaaa] hover:bg-[#222222]'
@@ -200,7 +257,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               onClick={() => onUpdateSettings({ autoActivateOnImport: !settings.autoActivateOnImport })}
               className={`w-9 h-5 rounded-full transition-colors relative p-0.5 ${
                 settings.autoActivateOnImport
-                  ? 'bg-[#16a34a]'
+                  ? 'bg-accent'
                   : isLight
                   ? 'bg-[#cbd5e1]'
                   : 'bg-[#333333]'
@@ -237,7 +294,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               }
               className={`w-9 h-5 rounded-full transition-colors relative p-0.5 ${
                 settings.showTitleBarControls !== false
-                  ? 'bg-[#16a34a]'
+                  ? 'bg-accent'
                   : isLight
                   ? 'bg-[#cbd5e1]'
                   : 'bg-[#333333]'

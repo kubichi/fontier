@@ -285,7 +285,7 @@ export const AddFontModal: React.FC<AddFontModalProps> = ({
             onClick={() => setActiveTab('font')}
             className={`py-2.5 font-medium border-b-2 flex items-center space-x-1.5 transition-colors ${
               activeTab === 'font'
-                ? 'border-[#4ade80] text-white'
+                ? 'border-accent text-white'
                 : 'border-transparent text-[#888888] hover:text-[#cccccc]'
             }`}
           >
@@ -296,7 +296,7 @@ export const AddFontModal: React.FC<AddFontModalProps> = ({
             onClick={() => setActiveTab('folder')}
             className={`py-2.5 font-medium border-b-2 ml-4 flex items-center space-x-1.5 transition-colors ${
               activeTab === 'folder'
-                ? 'border-[#4ade80] text-white'
+                ? 'border-accent text-white'
                 : 'border-transparent text-[#888888] hover:text-[#cccccc]'
             }`}
           >
@@ -332,7 +332,7 @@ export const AddFontModal: React.FC<AddFontModalProps> = ({
               className={`mb-4 p-2.5 rounded text-xs flex items-center space-x-2 ${
                 statusMessage.type === 'error'
                   ? 'bg-red-950/50 border border-red-800 text-red-300'
-                  : 'bg-emerald-950/50 border border-emerald-800 text-emerald-300'
+                  : 'bg-sky-950/50 border border-sky-800 text-sky-300'
               }`}
             >
               <AlertCircle className="w-4 h-4 shrink-0" />
@@ -349,15 +349,15 @@ export const AddFontModal: React.FC<AddFontModalProps> = ({
                 onDrop={handleDrop}
                 className={`border-2 border-dashed rounded-lg p-5 flex flex-col items-center justify-center transition-colors ${
                   isDragging
-                    ? 'border-[#4ade80] bg-[#4ade80]/10'
+                    ? 'border-accent bg-accent-subtle'
                     : selectedFiles.length > 0
-                    ? 'border-emerald-600/50 bg-emerald-950/20'
+                    ? 'border-accent-subtle bg-accent-subtle'
                     : 'border-[#383838] bg-[#191919]'
                 }`}
               >
                 {selectedFiles.length > 0 ? (
                   <div className="flex flex-col items-center space-y-2 text-center">
-                    <CheckCircle2 className="w-7 h-7 text-[#4ade80]" />
+                    <CheckCircle2 className="w-7 h-7 text-[#22c55e]" />
                     <span className="font-semibold text-white">
                       {selectedFiles.length === 1
                         ? selectedFiles[0].name
@@ -402,7 +402,7 @@ export const AddFontModal: React.FC<AddFontModalProps> = ({
                       <button
                         type="button"
                         onClick={handlePickDirectory}
-                        className="flex items-center space-x-1.5 px-3 py-1.5 bg-[#1e293b] hover:bg-[#2e3e57] text-[#60a5fa] hover:text-[#93c5fd] rounded border border-[#3b82f6]/40 font-medium transition-colors cursor-pointer"
+                        className="flex items-center space-x-1.5 px-3 py-1.5 bg-accent-subtle hover:bg-accent/20 text-accent rounded border border-accent/40 font-medium transition-colors cursor-pointer"
                       >
                         <Folder className="w-3.5 h-3.5" />
                         <span>Select Folder</span>
@@ -422,8 +422,8 @@ export const AddFontModal: React.FC<AddFontModalProps> = ({
 
               {/* Progress message during bulk parsing */}
               {isProcessing && (
-                <div className="bg-[#1e293b] border border-[#3b82f6] text-[#93c5fd] rounded p-2 text-xs flex items-center space-x-2 animate-pulse">
-                  <div className="w-3 h-3 border-2 border-[#38bdf8] border-t-transparent rounded-full animate-spin" />
+                <div className="bg-accent-subtle border border-accent/40 text-accent rounded p-2 text-xs flex items-center space-x-2 animate-pulse">
+                  <div className="w-3 h-3 border-2 border-accent border-t-transparent rounded-full animate-spin" />
                   <span>{processProgress || 'Importing and optimizing fonts...'}</span>
                 </div>
               )}
@@ -438,7 +438,7 @@ export const AddFontModal: React.FC<AddFontModalProps> = ({
                     {detectedTags.map((tag) => (
                       <span
                         key={tag}
-                        className="px-2 py-0.5 rounded text-[10px] font-medium bg-[#1e2e22] text-[#4ade80] border border-[#2d4a34]"
+                        className="px-2 py-0.5 rounded text-[10px] font-medium bg-accent-subtle text-accent border border-accent-subtle"
                       >
                         {tag}
                       </span>
@@ -455,7 +455,7 @@ export const AddFontModal: React.FC<AddFontModalProps> = ({
                   value={fontName}
                   onChange={(e) => setFontName(e.target.value)}
                   placeholder="e.g. Satoshi, Neue Montreal, Custom Pixel"
-                  className="w-full bg-[#181818] border border-[#333333] focus:border-[#4ade80] rounded px-3 py-1.5 text-white focus:outline-none text-xs"
+                  className="w-full bg-[#181818] border border-[#333333] focus:border-accent rounded px-3 py-1.5 text-white focus:outline-none text-xs"
                 />
               </div>
 
@@ -466,7 +466,7 @@ export const AddFontModal: React.FC<AddFontModalProps> = ({
                   <select
                     value={fontCategory}
                     onChange={(e) => setFontCategory(e.target.value as FontCategory)}
-                    className="w-full bg-[#181818] border border-[#333333] focus:border-[#4ade80] rounded px-2.5 py-1.5 text-white focus:outline-none text-xs"
+                    className="w-full bg-[#181818] border border-[#333333] focus:border-accent rounded px-2.5 py-1.5 text-white focus:outline-none text-xs"
                   >
                     <option value="Sans Serif">Sans Serif</option>
                     <option value="Serif">Serif</option>
@@ -483,7 +483,7 @@ export const AddFontModal: React.FC<AddFontModalProps> = ({
                   <select
                     value={selectedFolderId}
                     onChange={(e) => setSelectedFolderId(e.target.value)}
-                    className="w-full bg-[#181818] border border-[#333333] focus:border-[#4ade80] rounded px-2.5 py-1.5 text-white focus:outline-none text-xs"
+                    className="w-full bg-[#181818] border border-[#333333] focus:border-accent rounded px-2.5 py-1.5 text-white focus:outline-none text-xs"
                   >
                     <option value="">(No folder / General)</option>
                     {folders.map((f) => (
@@ -507,7 +507,7 @@ export const AddFontModal: React.FC<AddFontModalProps> = ({
                 <button
                   type="submit"
                   disabled={isProcessing || selectedFiles.length === 0}
-                  className="px-4 py-1.5 bg-[#16a34a] hover:bg-[#15803d] disabled:opacity-50 text-white font-medium rounded transition-colors"
+                  className="px-4 py-1.5 bg-accent hover:opacity-90 disabled:opacity-50 text-white font-medium rounded transition-opacity"
                 >
                   {selectedFiles.length > 1
                     ? `Import ${selectedFiles.length} Fonts`
@@ -525,7 +525,7 @@ export const AddFontModal: React.FC<AddFontModalProps> = ({
                   onChange={(e) => setNewFolderName(e.target.value)}
                   placeholder="e.g. Branding 2025, Web Fonts, UI Icons"
                   autoFocus
-                  className="w-full bg-[#181818] border border-[#333333] focus:border-[#4ade80] rounded px-3 py-1.5 text-white focus:outline-none text-xs"
+                  className="w-full bg-[#181818] border border-[#333333] focus:border-accent rounded px-3 py-1.5 text-white focus:outline-none text-xs"
                 />
               </div>
 
@@ -540,7 +540,7 @@ export const AddFontModal: React.FC<AddFontModalProps> = ({
                 <button
                   type="submit"
                   disabled={!newFolderName.trim()}
-                  className="px-4 py-1.5 bg-[#16a34a] hover:bg-[#15803d] disabled:opacity-50 text-white font-medium rounded transition-colors"
+                  className="px-4 py-1.5 bg-accent hover:opacity-90 disabled:opacity-50 text-white font-medium rounded transition-opacity"
                 >
                   Create Folder
                 </button>

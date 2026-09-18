@@ -32,12 +32,26 @@ class FontLRUCache {
     this.cache.set(key, value);
   }
   
+  delete(key: string): void {
+    const face = this.cache.get(key);
+    if (face) {
+      try { document.fonts.delete(face); } catch(e) {}
+      this.cache.delete(key);
+    }
+  }
+
   get size(): number { return this.cache.size; }
 
   keys(): IterableIterator<string> { return this.cache.keys(); }
 }
 
-const fontCache = new FontLRUCache(150);
+// Keep active in-memory font cache balanced (120 fonts max) to keep RAM low without thrashing
+const fontCache = new FontLRUCache(120);
+
+export function unregisterFont(font: { fontFamily: string }): void {
+  const cleanFamily = font.fontFamily.split(',')[0].replace(/['"]/g, '').trim();
+  fontCache.delete(cleanFamily);
+}
 
 function getDB(): Promise<IDBDatabase> {
   if (!dbPromise) {
@@ -172,33 +186,91 @@ export function getRegisteredCount(): number {
   return fontCache.size;
 }
 
+const failedFamilies = new Set<string>();
+const pendingLoads = new Map<string, Promise<boolean>>();
+
 /**
- * On-demand lazy font loader.
+ * On-demand lazy font loader with duplicate request prevention and failure caching.
  */
 export async function ensureFontLoaded(font: { id: string; fontFamily: string; filePath?: string; provider: string }): Promise<boolean> {
   if (font.provider !== 'Local') return true;
   const cleanFamily = font.fontFamily.split(',')[0].replace(/['"]/g, '').trim();
+  if (!cleanFamily) return false;
   
   if (fontCache.get(cleanFamily)) {
     return true; // Already loaded and promoted
   }
+  if (failedFamilies.has(cleanFamily)) {
+    return false; // Skip failed font to avoid hammering disk / IPC
+  }
+  if (pendingLoads.has(cleanFamily)) {
+    return pendingLoads.get(cleanFamily)!;
+  }
 
-  // 1. Electron on-demand disk read
-  if (font.filePath && typeof (window as any).electronAPI?.readFontFile === 'function') {
+  const loadPromise = (async (): Promise<boolean> => {
+    // 1. Electron on-demand disk read
+    if (font.filePath && typeof (window as any).electronAPI?.readFontFile === 'function') {
+      try {
+        const buf = await (window as any).electronAPI.readFontFile(font.filePath);
+        if (buf && buf.byteLength > 0) {
+          const face = await registerFontFace(cleanFamily, buf);
+          if (face) {
+            return true;
+          }
+        }
+      } catch (e) {
+        console.warn('Could not load font file from disk:', font.filePath, e);
+      }
+    }
+
+    // 2. Fallback to IndexedDB (browser or webkit fallback)
     try {
-      const buf = await (window as any).electronAPI.readFontFile(font.filePath);
-      if (buf && buf.byteLength > 0) {
-        const face = await registerFontFace(cleanFamily, buf);
+      const db = await getDB();
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const store = tx.objectStore(STORE_NAME);
+      const req = store.get(font.id);
+      const record = await new Promise<any>((resolve) => {
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => resolve(null);
+      });
+      if (record && record.buffer) {
+        const face = await registerFontFace(cleanFamily, record.buffer);
         if (face) {
           return true;
         }
       }
     } catch (e) {
-      console.warn('Could not load font file from disk:', font.filePath, e);
+      // ignore
+    }
+
+    // Remember failed family to prevent continuous retries
+    failedFamilies.add(cleanFamily);
+    return false;
+  })();
+
+  pendingLoads.set(cleanFamily, loadPromise);
+  try {
+    return await loadPromise;
+  } finally {
+    pendingLoads.delete(cleanFamily);
+  }
+}
+
+/**
+ * Retrieves the raw font ArrayBuffer for a local font.
+ */
+export async function getFontBuffer(font: { id: string; filePath?: string }): Promise<ArrayBuffer | null> {
+  // 1. Electron on-demand disk read
+  if (font.filePath && typeof (window as any).electronAPI?.readFontFile === 'function') {
+    try {
+      const buf = await (window as any).electronAPI.readFontFile(font.filePath);
+      if (buf && buf.byteLength > 0) return buf;
+    } catch (e) {
+      console.warn('Could not read font file from disk:', font.filePath, e);
     }
   }
 
-  // 2. Fallback to IndexedDB (browser or webkit fallback)
+  // 2. IndexedDB lookup
   try {
     const db = await getDB();
     const tx = db.transaction(STORE_NAME, 'readonly');
@@ -208,15 +280,10 @@ export async function ensureFontLoaded(font: { id: string; fontFamily: string; f
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => resolve(null);
     });
-    if (record && record.buffer) {
-      const face = await registerFontFace(cleanFamily, record.buffer);
-      if (face) {
-        return true;
-      }
-    }
+    if (record && record.buffer) return record.buffer;
   } catch (e) {
     // ignore
   }
 
-  return false;
+  return null;
 }

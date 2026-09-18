@@ -145,22 +145,43 @@ export default function App() {
   const folderInputRef = useRef<HTMLInputElement>(null);
   const folderHandlesRef = useRef<Map<string, any>>(new Map());
 
-  // Performance: Virtual windowing state to make 8,000+ fonts instant without lag or RAM spike
-  const [visibleCount, setVisibleCount] = useState<number>(60);
+  // Performance: True viewport windowing / virtualization so only ~20-30 font rows are mounted in the DOM
+  const fontListContainerRef = useRef<HTMLDivElement>(null);
+  const [scrollTop, setScrollTop] = useState<number>(0);
+  const [containerHeight, setContainerHeight] = useState<number>(800);
+  const [containerWidth, setContainerWidth] = useState<number>(1200);
   const deferredPreviewText = useDeferredValue(previewText);
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const [systemFontProgress, setSystemFontProgress] = useState<{ loaded: number; total: number } | null>(null);
 
-  // Sync native system accent color (Windows/macOS) into CSS custom property
+  // Sync accent color (custom user preference or native system accent) into CSS custom property
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.electronAPI?.getAccentColor) {
-      window.electronAPI.getAccentColor().then((color) => {
-        if (color && color.startsWith('#')) {
-          document.documentElement.style.setProperty('--accent-color', color);
-        }
-      }).catch(() => {});
+    const applyAccent = (color: string) => {
+      if (color && typeof document !== 'undefined') {
+        document.documentElement.style.setProperty('--accent-color', color);
+      }
+    };
+    if (appSettings.customAccentColor) {
+      applyAccent(appSettings.customAccentColor);
+      return;
     }
-  }, []);
+    if (typeof window !== 'undefined' && window.electronAPI?.getAccentColor) {
+      window.electronAPI
+        .getAccentColor()
+        .then((color) => {
+          if (color && color.startsWith('#')) {
+            applyAccent(color);
+          } else {
+            applyAccent('#38bdf8');
+          }
+        })
+        .catch(() => {
+          applyAccent('#38bdf8');
+        });
+    } else {
+      applyAccent('#38bdf8');
+    }
+  }, [appSettings.customAccentColor]);
 
   // Auto-detect Windows system fonts progressively without locking UI
   useEffect(() => {
@@ -229,9 +250,41 @@ export default function App() {
   }, []);
 
 
-  // Reset visible window count when navigation or filter changes
+  // Measure scroll container size for dynamic viewport virtualization (with jitter thresholds to eliminate CPU/GPU loops)
   useEffect(() => {
-    setVisibleCount(60);
+    const el = fontListContainerRef.current;
+    if (!el) return;
+    let rafId: number | null = null;
+
+    const updateDimensions = () => {
+      if (!el) return;
+      const h = el.clientHeight || 800;
+      const w = el.clientWidth || 1200;
+      // Guard against subpixel or scrollbar jitter triggering re-render cascades
+      setContainerHeight((prev) => (Math.abs(prev - h) >= 4 ? h : prev));
+      setContainerWidth((prev) => (Math.abs(prev - w) >= 8 ? w : prev));
+    };
+
+    updateDimensions();
+
+    const ro = new ResizeObserver(() => {
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(updateDimensions);
+    });
+
+    ro.observe(el);
+    return () => {
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      ro.disconnect();
+    };
+  }, [detailFont]);
+
+  // Reset scroll position when navigation or filter changes
+  useEffect(() => {
+    setScrollTop(0);
+    if (fontListContainerRef.current) {
+      fontListContainerRef.current.scrollTop = 0;
+    }
   }, [currentFilter, filters, deferredSearchQuery]);
 
   // Auto-Navigate Back from Detail Page on Search
@@ -241,11 +294,15 @@ export default function App() {
     }
   }, [searchQuery]);
 
+  // RAF-throttled scroll handler with delta guard — eliminates browser clamping feedback loops at the bottom of 4k fonts
+  const scrollRafRef = useRef<number | null>(null);
   const handleFontListScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    const target = e.currentTarget;
-    if (target.scrollTop + target.clientHeight >= target.scrollHeight - 600) {
-      setVisibleCount((prev) => Math.min(prev + 60, filteredFonts.length));
-    }
+    const newScroll = e.currentTarget.scrollTop;
+    if (scrollRafRef.current !== null) return;
+    scrollRafRef.current = requestAnimationFrame(() => {
+      setScrollTop((prev) => (Math.abs(prev - newScroll) < 2 ? prev : newScroll));
+      scrollRafRef.current = null;
+    });
   };
 
   // Persist custom fonts & overrides safely without quota overflow or lag (debounced)
@@ -1132,9 +1189,61 @@ export default function App() {
     return 'All Fonts';
   }, [currentFilter, folders]);
 
+  // Dynamic virtualization for List view: accurately matches DOM row height to prevent spacer mismatch jumps
+  const listItemHeight = useMemo(() => {
+    const isCompact = appSettings.rowDensity === 'compact';
+    return isCompact
+      ? Math.max(68, Math.round(fontSize * 1.1) + 42)
+      : Math.max(96, Math.round(fontSize * 1.25) + 69);
+  }, [appSettings.rowDensity, fontSize]);
+
+  const { listVisibleFonts, listTopSpacer, listBottomSpacer } = useMemo(() => {
+    const total = filteredFonts.length;
+    if (total === 0) return { listVisibleFonts: [], listTopSpacer: 0, listBottomSpacer: 0 };
+    const overscan = 5;
+    const visibleCount = Math.ceil(containerHeight / listItemHeight);
+    const start = Math.max(0, Math.floor(scrollTop / listItemHeight) - overscan);
+    const end = Math.min(total, start + visibleCount + overscan * 2);
+    return {
+      listVisibleFonts: filteredFonts.slice(start, end),
+      listTopSpacer: start * listItemHeight,
+      listBottomSpacer: Math.max(0, (total - end) * listItemHeight),
+    };
+  }, [filteredFonts, scrollTop, containerHeight, listItemHeight]);
+
+  // Dynamic virtualization for Grid view: computes visible range & spacers
+  const { gridVisibleFonts, gridTopSpacer, gridBottomSpacer, gridCols } = useMemo(() => {
+    const total = filteredFonts.length;
+    if (total === 0) return { gridVisibleFonts: [], gridTopSpacer: 0, gridBottomSpacer: 0, gridCols: 6 };
+
+    // Explicitly compute column count and exact card height from containerWidth
+    const cardTargetWidth = 145;
+    const availableWidth = Math.max(300, containerWidth - 32);
+    const cols = Math.max(2, Math.min(10, Math.floor(availableWidth / cardTargetWidth)));
+
+    const gap = 10; // gap-2.5 = 10px
+    const cardWidth = Math.floor((availableWidth - (cols - 1) * gap) / cols);
+    const cardHeight = cardWidth + gap;
+    const totalRows = Math.ceil(total / cols);
+    const visibleRows = Math.ceil(containerHeight / Math.max(1, cardHeight));
+    const overscanRows = 6;
+    const startRow = Math.max(0, Math.floor(scrollTop / Math.max(1, cardHeight)) - overscanRows);
+    const endRow = Math.min(totalRows, startRow + visibleRows + overscanRows * 2);
+
+    const startIdx = startRow * cols;
+    const endIdx = Math.min(total, endRow * cols);
+
+    return {
+      gridVisibleFonts: filteredFonts.slice(startIdx, endIdx),
+      gridTopSpacer: startRow * cardHeight,
+      gridBottomSpacer: Math.max(0, (totalRows - endRow) * cardHeight),
+      gridCols: cols,
+    };
+  }, [filteredFonts, scrollTop, containerHeight, containerWidth]);
+
   return (
     <div
-      className={`flex flex-col h-screen w-screen overflow-hidden select-none font-sans relative transition-colors ${
+      className={`flex flex-col h-screen w-screen overflow-hidden select-none font-sans relative ${
         isLight ? 'bg-[#f1f5f9] text-[#1e293b]' : 'bg-[#191919] text-[#e0e0e0]'
       }`}
       onDragOver={handleDragOver}
@@ -1155,8 +1264,8 @@ export default function App() {
 
       {/* Global Drag & Drop Overlay */}
       {isGlobalDragging && (
-        <div className="absolute inset-0 z-50 bg-[#0b1329]/90 border-2 border-dashed border-[#38bdf8] backdrop-blur-xs flex flex-col items-center justify-center pointer-events-none transition-all">
-          <HardDrive className="w-14 h-14 text-[#38bdf8] animate-bounce mb-3" />
+        <div className="absolute inset-0 z-50 bg-[#0b1329]/90 border-2 border-dashed border-accent backdrop-blur-xs flex flex-col items-center justify-center pointer-events-none transition-all">
+          <HardDrive className="w-14 h-14 text-accent animate-bounce mb-3" />
           <h2 className="text-xl font-bold text-white mb-1">
             Drop Local Font Files or Folder Here
           </h2>
@@ -1168,8 +1277,8 @@ export default function App() {
 
       {/* Live Sync Notification Banner */}
       {notification && (
-        <div className="absolute top-12 left-1/2 -translate-x-1/2 z-40 bg-[#1e293b] border border-[#3b82f6] text-[#e2e8f0] px-4 py-2 rounded-lg shadow-xl text-xs flex items-center space-x-2 animate-in fade-in duration-200">
-          <HardDrive className="w-4 h-4 text-[#38bdf8]" />
+        <div className="absolute top-12 left-1/2 -translate-x-1/2 z-40 bg-[#1e293b] border border-accent-subtle text-[#e2e8f0] px-4 py-2 rounded-lg shadow-xl text-xs flex items-center space-x-2 animate-in fade-in duration-200">
+          <HardDrive className="w-4 h-4 text-accent" />
           <span>{notification}</span>
           <button
             onClick={() => setNotification(null)}
@@ -1182,8 +1291,8 @@ export default function App() {
 
       {/* System Font Discovery Banner */}
       {systemFontProgress && !notification && (
-        <div className="absolute top-12 left-1/2 -translate-x-1/2 z-40 bg-[#0f172a] border border-[#0284c7] text-[#e2e8f0] px-4 py-1.5 rounded-full shadow-xl text-xs flex items-center space-x-2.5 animate-in fade-in duration-200">
-          <div className="w-2 h-2 rounded-full bg-[#38bdf8] animate-ping" />
+        <div className="absolute top-12 left-1/2 -translate-x-1/2 z-40 bg-[#0f172a] border border-accent-subtle text-[#e2e8f0] px-4 py-1.5 rounded-full shadow-xl text-xs flex items-center space-x-2.5 animate-in fade-in duration-200">
+          <div className="w-2 h-2 rounded-full bg-accent animate-ping" />
           <span>
             Indexing system fonts: <strong>{systemFontProgress.loaded}</strong> / {systemFontProgress.total} ({Math.round((systemFontProgress.loaded / Math.max(1, systemFontProgress.total)) * 100)}%)
           </span>
@@ -1206,13 +1315,13 @@ export default function App() {
         <div className="w-full h-0.5 bg-[#252525] overflow-hidden relative z-40 shrink-0">
           {systemFontProgress ? (
             <div
-              className="h-full bg-gradient-to-r from-[#38bdf8] via-[#818cf8] to-[#4ade80] transition-all duration-150"
+              className="h-full bg-gradient-to-r from-accent via-indigo-400 to-accent transition-all duration-150"
               style={{
                 width: `${Math.min(100, Math.round((systemFontProgress.loaded / Math.max(1, systemFontProgress.total)) * 100))}%`,
               }}
             />
           ) : (
-            <div className="h-full w-1/3 bg-gradient-to-r from-transparent via-[#38bdf8] to-transparent loading-bar-indeterminate" />
+            <div className="h-full w-1/3 bg-gradient-to-r from-transparent via-accent to-transparent loading-bar-indeterminate" />
           )}
         </div>
       )}
@@ -1251,7 +1360,7 @@ export default function App() {
 
         {/* Right Section: Toolbar + Font List OR Detail Page */}
         <main
-          className={`flex-1 flex flex-col overflow-hidden transition-colors ${
+          className={`flex-1 flex flex-col overflow-hidden ${
             isLight ? 'bg-[#ffffff]' : 'bg-[#1c1c1c]'
           }`}
         >
@@ -1293,7 +1402,7 @@ export default function App() {
 
               {/* View Header Breadcrumb / Count */}
               <div
-                className={`px-4 py-2 border-b flex items-center justify-between text-xs shrink-0 transition-colors ${
+                className={`px-4 py-2 border-b flex items-center justify-between text-xs shrink-0 ${
                   isLight
                     ? 'bg-[#f8fafc] border-[#e2e8f0] text-[#64748b]'
                     : 'bg-[#171717] border-[#252525] text-[#888888]'
@@ -1314,22 +1423,14 @@ export default function App() {
                   </span>
                   {searchQuery && (
                     <span
-                      className={`px-1.5 py-0.5 rounded text-[11px] font-medium ${
-                        isLight
-                          ? 'text-[#16a34a] bg-[#dcfce7]'
-                          : 'text-[#4ade80] bg-[#1e2e22]'
-                      }`}
+                      className="px-1.5 py-0.5 rounded text-[11px] font-medium text-accent bg-accent-subtle"
                     >
                       Searching: &ldquo;{searchQuery}&rdquo;
                     </span>
                   )}
                   {watchedFolder && currentFilter.startsWith('folder-') && (
                     <span
-                      className={`px-2 py-0.5 rounded text-[11px] flex items-center gap-1 border ${
-                        isLight
-                          ? 'text-[#0284c7] bg-[#e0f2fe] border-[#bae6fd]'
-                          : 'text-[#60a5fa] bg-[#1e2738] border-[#2b3a52]'
-                      }`}
+                      className="px-2 py-0.5 rounded text-[11px] flex items-center gap-1 border text-accent bg-accent-subtle border-accent-subtle"
                     >
                       <HardDrive className="w-3 h-3" /> Live Synced
                     </span>
@@ -1341,7 +1442,7 @@ export default function App() {
                     <button
                       onClick={handleRescanLocalFolder}
                       disabled={isScanning}
-                      className="text-[11px] text-[#38bdf8] hover:text-white flex items-center space-x-1"
+                      className="text-[11px] text-accent hover:underline flex items-center space-x-1"
                       title="Rescan directory for newly added fonts"
                     >
                       <RefreshCw
@@ -1360,8 +1461,9 @@ export default function App() {
               <div className="flex-1 flex overflow-hidden">
                 {/* Scrollable Font List / Grid with Virtual Windowing */}
                 <div
+                  ref={fontListContainerRef}
                   onScroll={handleFontListScroll}
-                  className={`flex-1 overflow-y-auto transition-colors ${
+                  className={`flex-1 overflow-y-auto ${
                     isLight ? 'bg-[#ffffff]' : 'bg-[#181818]'
                   }`}
                 >
@@ -1397,7 +1499,7 @@ export default function App() {
                       <div className="flex items-center space-x-2">
                         <button
                           onClick={handleOpenLocalFolder}
-                          className="px-3 py-1.5 bg-[#1e293b] hover:bg-[#283852] text-[#38bdf8] text-xs rounded border border-[#253754] transition-colors flex items-center space-x-1.5"
+                          className="px-3 py-1.5 bg-[#1e293b] hover:bg-[#283852] text-accent text-xs rounded border border-accent-subtle transition-colors flex items-center space-x-1.5"
                         >
                           <HardDrive className="w-3.5 h-3.5" />
                           <span>Open Local Fonts Folder</span>
@@ -1410,80 +1512,84 @@ export default function App() {
                               : 'bg-[#252525] hover:bg-[#2f2f2f] text-white border-[#383838]'
                           }`}
                         >
-                          <Plus className="w-3.5 h-3.5 text-[#4ade80]" />
+                          <Plus className="w-3.5 h-3.5 text-accent" />
                           <span>Import Font File</span>
                         </button>
                       </div>
                     </div>
                   ) : viewMode === 'grid' ? (
-                    <div className="p-4 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 gap-2.5">
-                      {filteredFonts.slice(0, visibleCount).map((font) => (
-                        <FontRow
-                          key={`${font.id}-${fontRenderKey}`}
-                          font={font}
-                          previewText={deferredPreviewText}
-                          fontSize={fontSize}
-                          textColor={textColor}
-                          bgColor={bgColor}
-                          alignment={alignment}
-                          viewMode="grid"
-                          isCompact={appSettings.rowDensity === 'compact'}
-                          isSelected={selectedFontForInspector?.id === font.id}
-                          onSelectFont={(f) => {
-                            setSelectedFontForInspector(f);
-                            setShowInspector(true);
-                          }}
-                          onToggleActive={handleToggleActive}
-                          onToggleFavorite={handleToggleFavorite}
-                          onOpenDetail={setDetailFont}
-                          theme={currentTheme}
-                        />
-                      ))}
+                    <div className="p-4">
+                      {gridTopSpacer > 0 && <div style={{ height: `${gridTopSpacer}px` }} />}
+                      <div
+                        className="grid gap-2.5"
+                        style={{ gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` }}
+                      >
+                        {gridVisibleFonts.map((font) => (
+                          <FontRow
+                            key={`${font.id}-${fontRenderKey}`}
+                            font={font}
+                            previewText={deferredPreviewText}
+                            fontSize={fontSize}
+                            textColor={textColor}
+                            bgColor={bgColor}
+                            alignment={alignment}
+                            viewMode="grid"
+                            isCompact={appSettings.rowDensity === 'compact'}
+                            isSelected={selectedFontForInspector?.id === font.id}
+                            onSelectFont={(f) => {
+                              setSelectedFontForInspector(f);
+                              setShowInspector(true);
+                            }}
+                            onToggleActive={handleToggleActive}
+                            onToggleFavorite={handleToggleFavorite}
+                            onOpenDetail={setDetailFont}
+                            theme={currentTheme}
+                          />
+                        ))}
+                      </div>
+                      {gridBottomSpacer > 0 && <div style={{ height: `${gridBottomSpacer}px` }} />}
                     </div>
-
                   ) : (
-                    <div
-                      className={`divide-y ${
-                        isLight ? 'divide-[#f1f5f9]' : 'divide-[#222222]'
-                      }`}
-                    >
-                      {filteredFonts.slice(0, visibleCount).map((font) => (
-                        <FontRow
-                          key={`${font.id}-${fontRenderKey}`}
-                          font={font}
-                          previewText={deferredPreviewText}
-                          fontSize={fontSize}
-                          textColor={textColor}
-                          bgColor={bgColor}
-                          alignment={alignment}
-                          viewMode="list"
-                          isCompact={appSettings.rowDensity === 'compact'}
-                          isSelected={selectedFontForInspector?.id === font.id}
-                          onSelectFont={(f) => {
-                            setSelectedFontForInspector(f);
-                            setShowInspector(true);
-                          }}
-                          onToggleActive={handleToggleActive}
-                          onToggleFavorite={handleToggleFavorite}
-                          onOpenDetail={setDetailFont}
-                          theme={currentTheme}
-                        />
-                      ))}
+                    <div>
+                      {listTopSpacer > 0 && <div style={{ height: `${listTopSpacer}px` }} />}
+                      <div
+                        className={`divide-y ${
+                          isLight ? 'divide-[#f1f5f9]' : 'divide-[#222222]'
+                        }`}
+                      >
+                        {listVisibleFonts.map((font) => (
+                          <FontRow
+                            key={`${font.id}-${fontRenderKey}`}
+                            font={font}
+                            previewText={deferredPreviewText}
+                            fontSize={fontSize}
+                            textColor={textColor}
+                            bgColor={bgColor}
+                            alignment={alignment}
+                            viewMode="list"
+                            isCompact={appSettings.rowDensity === 'compact'}
+                            isSelected={selectedFontForInspector?.id === font.id}
+                            onSelectFont={(f) => {
+                              setSelectedFontForInspector(f);
+                              setShowInspector(true);
+                            }}
+                            onToggleActive={handleToggleActive}
+                            onToggleFavorite={handleToggleFavorite}
+                            onOpenDetail={setDetailFont}
+                            theme={currentTheme}
+                          />
+                        ))}
+                      </div>
+                      {listBottomSpacer > 0 && <div style={{ height: `${listBottomSpacer}px` }} />}
                     </div>
                   )}
 
-                  {/* Virtual Windowing Progress / Load More */}
-                  {filteredFonts.length > visibleCount && (
-                    <div className="py-4 flex flex-col items-center justify-center space-y-1.5 border-t border-[#252525]">
-                      <span className={`text-[11px] ${isLight ? 'text-slate-500' : 'text-[#888888]'}`}>
-                        Showing {Math.min(visibleCount, filteredFonts.length)} of {filteredFonts.length} fonts (virtualized for high performance)
+                  {/* Virtual Windowing Memory Status */}
+                  {filteredFonts.length > 0 && (
+                    <div className="py-3 flex items-center justify-center border-t border-[#252525]/30">
+                      <span className={`text-[11px] ${isLight ? 'text-slate-400' : 'text-[#666666]'}`}>
+                        {filteredFonts.length} {filteredFonts.length === 1 ? 'font' : 'fonts'} loaded • Virtualized memory cache active
                       </span>
-                      <button
-                        onClick={() => setVisibleCount((prev) => Math.min(prev + 100, filteredFonts.length))}
-                        className="text-xs text-[#38bdf8] hover:underline font-medium"
-                      >
-                        Load 100 more fonts
-                      </button>
                     </div>
                   )}
                 </div>

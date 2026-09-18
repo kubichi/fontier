@@ -171,7 +171,7 @@ export async function detectWindowsSystemFonts(
         result.push({
           id: `system-${familyName.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
           name: familyName,
-          fontFamily: `"${familyName}", sans-serif`,
+          fontFamily: `"${familyName}"`,
           format: 'TTF',
           category: cat,
           tags: ['Windows System', 'Installed', cat, `${data.styles.length} styles`],

@@ -79,6 +79,7 @@ export interface AppSettings {
   rowDensity: 'comfortable' | 'compact';
   uiFont?: string;
   showTitleBarControls?: boolean;
+  customAccentColor?: string;
 }
 
 export interface ColorScheme {
