@@ -95,6 +95,23 @@ export async function parseFontBuffer(
       copyright = extractString(parsedFont.names.copyright) || '';
       numGlyphs = parsedFont.numGlyphs || (parsedFont.glyphs ? parsedFont.glyphs.length : 256);
       unitsPerEm = parsedFont.unitsPerEm || 1000;
+
+      // Extract all supported unicode codepoints
+      if (parsedFont.glyphs && parsedFont.glyphs.length) {
+        const codepoints: number[] = [];
+        for (let i = 0; i < parsedFont.glyphs.length; i++) {
+          const g = parsedFont.glyphs.get(i);
+          if (g.unicode !== undefined && g.unicode > 0) {
+            codepoints.push(g.unicode);
+          }
+          if (g.unicodes && g.unicodes.length) {
+            for (const u of g.unicodes) {
+              if (u > 0 && !codepoints.includes(u)) codepoints.push(u);
+            }
+          }
+        }
+        (buffer as any).__supportedCodepoints = codepoints;
+      }
     }
   } catch (err) {
     console.warn('Could not parse OpenType tables with opentype.js; using filename as fallback:', err);
@@ -161,9 +178,10 @@ export async function parseFontBuffer(
     numGlyphs,
     fileSize: fileSize || arrayBuffer.byteLength,
     fileName,
-    filePath: fileName,
+    filePath: filePath || fileName,
     unitsPerEm,
     isCustomUploaded: true,
+    supportedCodepoints: (buffer as any).__supportedCodepoints,
   };
 }
 

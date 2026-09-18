@@ -151,6 +151,17 @@ export default function App() {
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const [systemFontProgress, setSystemFontProgress] = useState<{ loaded: number; total: number } | null>(null);
 
+  // Sync native system accent color (Windows/macOS) into CSS custom property
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.electronAPI?.getAccentColor) {
+      window.electronAPI.getAccentColor().then((color) => {
+        if (color && color.startsWith('#')) {
+          document.documentElement.style.setProperty('--accent-color', color);
+        }
+      }).catch(() => {});
+    }
+  }, []);
+
   // Auto-detect Windows system fonts progressively without locking UI
   useEffect(() => {
     let isCancelled = false;
@@ -222,6 +233,13 @@ export default function App() {
   useEffect(() => {
     setVisibleCount(60);
   }, [currentFilter, filters, deferredSearchQuery]);
+
+  // Auto-Navigate Back from Detail Page on Search
+  useEffect(() => {
+    if (searchQuery.trim() && detailFont) {
+      setDetailFont(null);
+    }
+  }, [searchQuery]);
 
   const handleFontListScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const target = e.currentTarget;
@@ -1398,7 +1416,7 @@ export default function App() {
                       </div>
                     </div>
                   ) : viewMode === 'grid' ? (
-                    <div className="p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                    <div className="p-4 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 gap-2.5">
                       {filteredFonts.slice(0, visibleCount).map((font) => (
                         <FontRow
                           key={`${font.id}-${fontRenderKey}`}

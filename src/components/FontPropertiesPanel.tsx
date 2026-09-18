@@ -541,7 +541,7 @@ export const FontPropertiesPanel: React.FC<FontPropertiesPanelProps> = ({
                 <div className="flex items-center justify-between">
                   <span className="text-[#888888] text-[11px]">File Source</span>
                   <span className="text-[10px] text-[#22c55e] font-medium">
-                    {font.provider === 'Local' ? 'Local Storage Folder' : 'Google Fonts'}
+                    {font.provider === 'Local' ? 'Local File' : font.provider === 'System' ? 'System Font' : 'Google Fonts'}
                   </span>
                 </div>
                 {font.fileName && (
@@ -633,41 +633,53 @@ export const FontPropertiesPanel: React.FC<FontPropertiesPanelProps> = ({
                 </div>
               )}
 
-              {/* Commercial & Personal Usage Badges */}
-              <div className="grid grid-cols-2 gap-2 pt-1">
-                <div
-                  className={`p-2 rounded flex items-center space-x-1.5 border ${
-                    isLight
-                      ? 'bg-[#f8fafc] border-[#e2e8f0]'
-                      : 'bg-[#242424] border-[#303030]'
-                  }`}
-                >
-                  <div className="w-2 h-2 rounded-full bg-[#22c55e]" />
-                  <span
-                    className={`text-[10px] font-medium ${
-                      isLight ? 'text-[#334155]' : 'text-[#cccccc]'
+              {/* Commercial & Personal Usage Badges — only for Google Fonts */}
+              {font.provider === 'Google' ? (
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <div
+                    className={`p-2 rounded flex items-center space-x-1.5 border ${
+                      isLight
+                        ? 'bg-[#f8fafc] border-[#e2e8f0]'
+                        : 'bg-[#242424] border-[#303030]'
                     }`}
                   >
-                    Commercial Use
-                  </span>
-                </div>
-                <div
-                  className={`p-2 rounded flex items-center space-x-1.5 border ${
-                    isLight
-                      ? 'bg-[#f8fafc] border-[#e2e8f0]'
-                      : 'bg-[#242424] border-[#303030]'
-                  }`}
-                >
-                  <div className="w-2 h-2 rounded-full bg-[#22c55e]" />
-                  <span
-                    className={`text-[10px] font-medium ${
-                      isLight ? 'text-[#334155]' : 'text-[#cccccc]'
+                    <div className="w-2 h-2 rounded-full bg-[#22c55e]" />
+                    <span
+                      className={`text-[10px] font-medium ${
+                        isLight ? 'text-[#334155]' : 'text-[#cccccc]'
+                      }`}
+                    >
+                      Commercial Use
+                    </span>
+                  </div>
+                  <div
+                    className={`p-2 rounded flex items-center space-x-1.5 border ${
+                      isLight
+                        ? 'bg-[#f8fafc] border-[#e2e8f0]'
+                        : 'bg-[#242424] border-[#303030]'
                     }`}
                   >
-                    Personal Use
+                    <div className="w-2 h-2 rounded-full bg-[#22c55e]" />
+                    <span
+                      className={`text-[10px] font-medium ${
+                        isLight ? 'text-[#334155]' : 'text-[#cccccc]'
+                      }`}
+                    >
+                      Personal Use
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className={`p-2 rounded border text-center ${
+                  isLight
+                    ? 'bg-[#fefce8] border-[#fde68a] text-[#92400e]'
+                    : 'bg-[#2a2518] border-[#3d3520] text-[#fbbf24]'
+                }`}>
+                  <span className="text-[10px] font-medium">
+                    ⚠ License not verified for local fonts
                   </span>
                 </div>
-              </div>
+              )}
             </div>
           )}
         </div>

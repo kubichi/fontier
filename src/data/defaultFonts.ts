@@ -440,6 +440,7 @@ export const PRESET_PHRASES = [
   'Pack my box with five dozen liquor jugs.',
   'Sphinx of black quartz, judge my vow.',
   'How vexingly quick daft zebras jump!',
+  'Pijamalı hasta, yağız şoföre çabucak güvendi.',
   'HAMBURGEFONTSIV',
   'ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz 0123456789',
   'Typography is the craft of endowing human language with a durable visual form.',

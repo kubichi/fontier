@@ -49,6 +49,8 @@ export interface FontItem {
   unitsPerEm?: number;
   isCustomUploaded?: boolean;
   fontUrl?: string;
+  supportedCodepoints?: number[];
+  licenseFilePath?: string;
 }
 
 export interface FolderItem {

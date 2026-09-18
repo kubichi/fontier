@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ArrowLeft,
   Check,
@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { FontItem, DetailTab, TextAlignment, FontStyle } from '../types';
 import { autoTagFontMetadata } from '../utils/autoTagger';
+import { ensureFontLoaded } from '../utils/fontStorage';
 
 interface FontDetailPageProps {
   font: FontItem;
@@ -57,6 +58,11 @@ export const FontDetailPage: React.FC<FontDetailPageProps> = ({
   const [copiedGlyph, setCopiedGlyph] = useState(false);
   const [glyphFilter, setGlyphFilter] = useState<'all' | 'upper' | 'lower' | 'numbers' | 'symbols' | 'extended'>('all');
 
+  // Ensure font is loaded into Chromium font engine so glyphs and pangrams render correctly
+  useEffect(() => {
+    ensureFontLoaded(font);
+  }, [font]);
+
   const alignClass =
     alignment === 'center'
       ? 'text-center'
@@ -64,10 +70,27 @@ export const FontDetailPage: React.FC<FontDetailPageProps> = ({
       ? 'text-right'
       : 'text-left';
 
-  const copyCharacter = (char: string) => {
-    navigator.clipboard.writeText(char);
-    setCopiedGlyph(true);
-    setTimeout(() => setCopiedGlyph(false), 1500);
+  const copyCharacter = async (char: string) => {
+    try {
+      if (typeof window !== 'undefined' && window.electronAPI?.copyToClipboard) {
+        await window.electronAPI.copyToClipboard(char);
+      } else {
+        await navigator.clipboard.writeText(char);
+      }
+      setCopiedGlyph(true);
+      setTimeout(() => setCopiedGlyph(false), 1500);
+    } catch {
+      // Fallback
+      navigator.clipboard?.writeText(char);
+      setCopiedGlyph(true);
+      setTimeout(() => setCopiedGlyph(false), 1500);
+    }
+  };
+
+  const isCharSupported = (char: string): boolean => {
+    if (!font.supportedCodepoints || font.supportedCodepoints.length === 0) return true;
+    const code = char.codePointAt(0);
+    return code !== undefined && font.supportedCodepoints.includes(code);
   };
 
   const getUnicodeHex = (char: string) => {
@@ -333,14 +356,14 @@ export const FontDetailPage: React.FC<FontDetailPageProps> = ({
                   Alphabet Pangram Preview
                 </span>
                 <p
-                  className="text-base text-[#e0e0e0] leading-snug"
+                  className="text-base text-[#e0e0e0] leading-snug break-words"
                   style={{
                     fontFamily: font.fontFamily,
                     fontWeight: selectedStyle.weight,
                     fontStyle: selectedStyle.style,
                   }}
                 >
-                  The quick brown fox jumps over the lazy dog. 0123456789
+                  {previewText || 'The quick brown fox jumps over the lazy dog. 0123456789'}
                 </p>
               </div>
             </div>
@@ -376,10 +399,10 @@ export const FontDetailPage: React.FC<FontDetailPageProps> = ({
             {(glyphFilter === 'all' || glyphFilter === 'upper') && (
               <div className="space-y-2">
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-[#888888]">
-                  Uppercase Alphabet ({UPPERCASE_ALPHABET.length})
+                  Uppercase Alphabet ({UPPERCASE_ALPHABET.filter(isCharSupported).length})
                 </h3>
                 <div className="grid grid-cols-8 sm:grid-cols-13 gap-2">
-                  {UPPERCASE_ALPHABET.map((char) => (
+                  {UPPERCASE_ALPHABET.filter(isCharSupported).map((char) => (
                     <button
                       key={char}
                       onClick={() => setSelectedGlyph(char)}
@@ -412,10 +435,10 @@ export const FontDetailPage: React.FC<FontDetailPageProps> = ({
             {(glyphFilter === 'all' || glyphFilter === 'lower') && (
               <div className="space-y-2">
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-[#888888]">
-                  Lowercase Alphabet ({LOWERCASE_ALPHABET.length})
+                  Lowercase Alphabet ({LOWERCASE_ALPHABET.filter(isCharSupported).length})
                 </h3>
                 <div className="grid grid-cols-8 sm:grid-cols-13 gap-2">
-                  {LOWERCASE_ALPHABET.map((char) => (
+                  {LOWERCASE_ALPHABET.filter(isCharSupported).map((char) => (
                     <button
                       key={char}
                       onClick={() => setSelectedGlyph(char)}
@@ -448,10 +471,10 @@ export const FontDetailPage: React.FC<FontDetailPageProps> = ({
             {(glyphFilter === 'all' || glyphFilter === 'numbers') && (
               <div className="space-y-2">
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-[#888888]">
-                  Numerals (0-9)
+                  Numerals (0-9) ({NUMBERS.filter(isCharSupported).length})
                 </h3>
                 <div className="grid grid-cols-5 sm:grid-cols-10 gap-2">
-                  {NUMBERS.map((char) => (
+                  {NUMBERS.filter(isCharSupported).map((char) => (
                     <button
                       key={char}
                       onClick={() => setSelectedGlyph(char)}
@@ -484,10 +507,10 @@ export const FontDetailPage: React.FC<FontDetailPageProps> = ({
             {(glyphFilter === 'all' || glyphFilter === 'symbols') && (
               <div className="space-y-2">
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-[#888888]">
-                  Symbols & Punctuation ({SYMBOLS.length})
+                  Symbols & Punctuation ({SYMBOLS.filter(isCharSupported).length})
                 </h3>
                 <div className="grid grid-cols-6 sm:grid-cols-12 gap-2">
-                  {SYMBOLS.map((char, i) => (
+                  {SYMBOLS.filter(isCharSupported).map((char, i) => (
                     <button
                       key={`${char}-${i}`}
                       onClick={() => setSelectedGlyph(char)}
@@ -520,10 +543,10 @@ export const FontDetailPage: React.FC<FontDetailPageProps> = ({
             {(glyphFilter === 'all' || glyphFilter === 'extended') && (
               <div className="space-y-2">
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-[#888888]">
-                  Accents & Latin Extended ({EXTENDED_LATIN.length})
+                  Accents & Latin Extended ({EXTENDED_LATIN.filter(isCharSupported).length})
                 </h3>
                 <div className="grid grid-cols-6 sm:grid-cols-12 gap-2">
-                  {EXTENDED_LATIN.map((char, i) => (
+                  {EXTENDED_LATIN.filter(isCharSupported).map((char, i) => (
                     <button
                       key={`${char}-${i}`}
                       onClick={() => setSelectedGlyph(char)}
@@ -766,7 +789,7 @@ export const FontDetailPage: React.FC<FontDetailPageProps> = ({
                 <div>
                   <span className="text-[#888888] block text-[11px]">File Source</span>
                   <span className="font-medium text-[#38bdf8]">
-                    {font.provider === 'Local' ? 'Local System Folder' : 'Google Fonts Library'}
+                    {font.provider === 'Local' ? 'Local File' : font.provider === 'System' ? 'System Font' : 'Google Fonts Library'}
                   </span>
                 </div>
                 {font.fileSize && (
@@ -811,24 +834,36 @@ export const FontDetailPage: React.FC<FontDetailPageProps> = ({
                 </div>
               )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-                <div className="p-3 bg-[#171717] rounded border border-[#292929] space-y-1">
-                  <span className="text-xs font-semibold text-[#22c55e] flex items-center gap-1.5">
-                    <Check className="w-3.5 h-3.5" /> Commercial Usage Allowed
+              {/* Commercial & Personal Badges: Only for verified Google fonts */}
+              {font.provider === 'Google' ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                  <div className="p-3 bg-[#171717] rounded border border-[#292929] space-y-1">
+                    <span className="text-xs font-semibold text-[#22c55e] flex items-center gap-1.5">
+                      <Check className="w-3.5 h-3.5" /> Commercial Usage Allowed
+                    </span>
+                    <p className="text-[11px] text-[#888888]">
+                      Permitted in commercial client logos, websites, digital applications, and print materials.
+                    </p>
+                  </div>
+                  <div className="p-3 bg-[#171717] rounded border border-[#292929] space-y-1">
+                    <span className="text-xs font-semibold text-[#22c55e] flex items-center gap-1.5">
+                      <Check className="w-3.5 h-3.5" /> Personal Projects Allowed
+                    </span>
+                    <p className="text-[11px] text-[#888888]">
+                      Permitted for personal non-commercial experiments, mockups, and desktop design.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-3 bg-[#1c1917] rounded border border-[#442c1d] text-center">
+                  <span className="text-xs text-[#fbbf24] font-medium block mb-1">
+                    ⚠ License information not verified for local fonts
                   </span>
-                  <p className="text-[11px] text-[#888888]">
-                    Permitted in commercial client logos, websites, digital applications, and print materials.
+                  <p className="text-[11px] text-[#a8a29e]">
+                    Local fonts may have individual licenses. Check the font foundry or accompanying documentation before commercial use.
                   </p>
                 </div>
-                <div className="p-3 bg-[#171717] rounded border border-[#292929] space-y-1">
-                  <span className="text-xs font-semibold text-[#22c55e] flex items-center gap-1.5">
-                    <Check className="w-3.5 h-3.5" /> Personal Projects Allowed
-                  </span>
-                  <p className="text-[11px] text-[#888888]">
-                    Permitted for personal non-commercial experiments, mockups, and desktop design.
-                  </p>
-                </div>
-              </div>
+              )}
             </div>
           </div>
         )}

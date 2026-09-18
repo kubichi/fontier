@@ -5,7 +5,39 @@ const DB_VERSION = 2;
 const STORE_NAME = 'font_binaries';
 
 let dbPromise: Promise<IDBDatabase> | null = null;
-const registeredFamilies = new Set<string>();
+
+class FontLRUCache {
+  private cache = new Map<string, FontFace>(); // Map maintains insertion order
+  private maxSize: number;
+  
+  constructor(maxSize: number) { this.maxSize = maxSize; }
+  
+  has(key: string): boolean { return this.cache.has(key); }
+  
+  get(key: string): FontFace | undefined {
+    const val = this.cache.get(key);
+    if (val) { this.cache.delete(key); this.cache.set(key, val); } // promote to MRU
+    return val;
+  }
+  
+  set(key: string, value: FontFace): void {
+    if (this.cache.has(key)) { this.cache.delete(key); }
+    else if (this.cache.size >= this.maxSize) {
+      // Evict LRU (first entry)
+      const lruKey = this.cache.keys().next().value;
+      const lruFace = this.cache.get(lruKey!);
+      if (lruFace) { try { document.fonts.delete(lruFace); } catch(e) {} }
+      this.cache.delete(lruKey!);
+    }
+    this.cache.set(key, value);
+  }
+  
+  get size(): number { return this.cache.size; }
+
+  keys(): IterableIterator<string> { return this.cache.keys(); }
+}
+
+const fontCache = new FontLRUCache(150);
 
 function getDB(): Promise<IDBDatabase> {
   if (!dbPromise) {
@@ -15,7 +47,7 @@ function getDB(): Promise<IDBDatabase> {
         return;
       }
       const request = window.indexedDB.open(DB_NAME, DB_VERSION);
-      request.onupgradeneeded = (event) => {
+      request.onupgradeneeded = (event: any) => {
         const db = request.result;
         if (event.oldVersion < 2 && db.objectStoreNames.contains(STORE_NAME)) {
           db.deleteObjectStore(STORE_NAME);
@@ -53,24 +85,17 @@ export async function saveFontBinary(id: string, familyName: string, buffer: Arr
 
 /**
  * Registers a font into document.fonts using the FontFace API.
- *
- * Strategy:
- * - Create a temporary Blob URL from the buffer.
- * - Load the FontFace using the blob URL (most reliable in Electron/Chromium).
- * - Add the loaded face to document.fonts.
- * - Immediately revoke the blob URL — the font data is now held by the browser's
- *   internal font engine, not the JS heap. This is critical for RAM: an unrevoked
- *   blob URL pins the full binary in memory forever.
- * - The browser automatically repaints text using the new face (no React re-render needed).
+ * Returns the FontFace object so it can be stored in the cache.
  */
-export async function registerFontFace(familyName: string, buffer: ArrayBuffer): Promise<boolean> {
-  if (typeof document === 'undefined') return false;
+export async function registerFontFace(familyName: string, buffer: ArrayBuffer): Promise<FontFace | null> {
+  if (typeof document === 'undefined') return null;
 
   const cleanFamily = familyName.replace(/['"]/g, '').trim();
-  if (!cleanFamily) return false;
+  if (!cleanFamily) return null;
 
-  if (registeredFamilies.has(cleanFamily)) {
-    return true;
+  const existing = fontCache.get(cleanFamily);
+  if (existing) {
+    return existing;
   }
 
   let blobUrl = '';
@@ -82,15 +107,16 @@ export async function registerFontFace(familyName: string, buffer: ArrayBuffer):
     const face = new FontFace(cleanFamily, 'url("' + blobUrl + '")');
     await face.load();
     document.fonts.add(face);
+    
+    // Auto-cache it just in case this is called externally (e.g. from fontParser)
+    fontCache.set(cleanFamily, face);
 
-    registeredFamilies.add(cleanFamily);
-    return true;
+    return face;
   } catch (err) {
     console.warn('Failed to register font "' + familyName + '":', err);
-    return false;
+    return null;
   } finally {
     // Always revoke — whether load succeeded or failed.
-    // Once document.fonts.add(face) is called, the browser engine owns the data.
     if (blobUrl) URL.revokeObjectURL(blobUrl);
   }
 }
@@ -98,8 +124,6 @@ export async function registerFontFace(familyName: string, buffer: ArrayBuffer):
 /**
  * Light startup rehydration:
  * Loads at most maxCount (default 30) stored fonts from IndexedDB for the initial viewport.
- * All other fonts load smoothly on demand via ensureFontLoaded when scrolled into view.
- * This prevents loading 4,000+ font buffers into RAM, keeping memory usage at ~180-200MB!
  */
 export async function rehydrateAllStoredFonts(maxCount = 30): Promise<number> {
   try {
@@ -119,8 +143,11 @@ export async function rehydrateAllStoredFonts(maxCount = 30): Promise<number> {
         const item = cursor.value;
         if (item && item.buffer && item.familyName) {
           try {
-            const ok = await registerFontFace(item.familyName, item.buffer);
-            if (ok) count++;
+            const face = await registerFontFace(item.familyName, item.buffer);
+            if (face) {
+              // The cache setting is handled inside registerFontFace now, but we can do it explicitly or skip.
+              count++;
+            }
           } catch {
             // ignore
           }
@@ -138,26 +165,33 @@ export async function rehydrateAllStoredFonts(maxCount = 30): Promise<number> {
 }
 
 export function getRegisteredFamilies(): ReadonlySet<string> {
-  return registeredFamilies;
+  return new Set(fontCache.keys());
+}
+
+export function getRegisteredCount(): number {
+  return fontCache.size;
 }
 
 /**
  * On-demand lazy font loader.
- * If font face is already loaded, returns immediately.
- * Otherwise, loads from disk (in Electron) or IndexedDB and registers only this font face.
- * This keeps RAM usage low (~180MB) because only fonts currently in the viewport are decoded!
  */
 export async function ensureFontLoaded(font: { id: string; fontFamily: string; filePath?: string; provider: string }): Promise<boolean> {
   if (font.provider !== 'Local') return true;
   const cleanFamily = font.fontFamily.split(',')[0].replace(/['"]/g, '').trim();
-  if (registeredFamilies.has(cleanFamily)) return true;
+  
+  if (fontCache.get(cleanFamily)) {
+    return true; // Already loaded and promoted
+  }
 
-  // 1. Electron on-demand disk read (fastest, zero RAM storage in IndexedDB)
+  // 1. Electron on-demand disk read
   if (font.filePath && typeof (window as any).electronAPI?.readFontFile === 'function') {
     try {
       const buf = await (window as any).electronAPI.readFontFile(font.filePath);
       if (buf && buf.byteLength > 0) {
-        return await registerFontFace(cleanFamily, buf);
+        const face = await registerFontFace(cleanFamily, buf);
+        if (face) {
+          return true;
+        }
       }
     } catch (e) {
       console.warn('Could not load font file from disk:', font.filePath, e);
@@ -175,7 +209,10 @@ export async function ensureFontLoaded(font: { id: string; fontFamily: string; f
       req.onerror = () => resolve(null);
     });
     if (record && record.buffer) {
-      return await registerFontFace(cleanFamily, record.buffer);
+      const face = await registerFontFace(cleanFamily, record.buffer);
+      if (face) {
+        return true;
+      }
     }
   } catch (e) {
     // ignore
@@ -183,4 +220,3 @@ export async function ensureFontLoaded(font: { id: string; fontFamily: string; f
 
   return false;
 }
-

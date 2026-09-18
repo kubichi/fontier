@@ -55,172 +55,41 @@ export const FontRow: React.FC<FontRowProps> = React.memo(({
   if (viewMode === 'grid') {
     return (
       <div
-        className={`rounded-md border transition-all overflow-hidden flex flex-col group ${
+        onClick={(e) => {
+          e.stopPropagation();
+          onSelectFont?.(font);
+          onOpenDetail(font);
+        }}
+        className={`relative aspect-square p-3 flex flex-col items-center justify-between rounded-lg border transition-all cursor-pointer group ${
           isLight
-            ? isSelected
-              ? 'bg-white border-[#16a34a] ring-2 ring-[#16a34a]/30 shadow-md'
-              : 'bg-white border-[#e2e8f0] hover:border-[#cbd5e1] shadow-2xs'
-            : isSelected
-            ? 'bg-[#1e1e1e] border-[#3b82f6] ring-1 ring-[#3b82f6]/50 shadow-lg shadow-blue-900/10'
-            : 'bg-[#1e1e1e] border-[#2b2b2b] hover:border-[#404040]'
-        }`}
-        onClick={() => onSelectFont?.(font)}
+            ? 'bg-white hover:bg-gray-50 border-gray-200 hover:border-[#16a34a]/50'
+            : 'bg-[#1d1d1d] hover:bg-[#252525] border-[#2a2a2a] hover:border-[#4ade80]/50'
+        } ${isSelected ? (isLight ? 'ring-2 ring-[#16a34a]/30' : 'ring-1 ring-[#4ade80]/30') : ''}`}
+        title={font.name}
       >
-        {/* Header bar of card */}
-        <div
-          className={`flex items-center justify-between ${
-            isCompact ? 'px-2.5 py-1 text-[11px]' : 'px-3 py-2 text-xs'
-          } border-b ${
-            isLight ? 'bg-[#f8f9fa] border-[#e2e8f0]' : 'bg-[#181818] border-[#262626]'
-          }`}
-        >
-          <div className="flex items-center space-x-2 truncate">
-            {/* Activation circle */}
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleActive(font.id);
-              }}
-              className="relative shrink-0 focus:outline-none"
-              title={font.active ? 'Deactivate font' : 'Activate font'}
-            >
-              <div
-                className={`w-3.5 h-3.5 rounded-full border transition-all flex items-center justify-center ${
-                  font.active
-                    ? 'border-[#22c55e] bg-[#22c55e]'
-                    : isLight
-                    ? 'border-[#cbd5e1] hover:border-[#94a3b8] bg-white'
-                    : 'border-[#555555] hover:border-[#888888] bg-transparent'
-                }`}
-              >
-                {font.active && <Check className="w-2.5 h-2.5 text-black stroke-[3]" />}
-              </div>
-            </button>
-
-            <span
-              onClick={(e) => {
-                e.stopPropagation();
-                onOpenDetail(font);
-              }}
-              className={`font-medium cursor-pointer truncate ${
-                isLight
-                  ? 'text-[#0f172a] hover:text-[#16a34a]'
-                  : 'text-[#e0e0e0] hover:text-[#4ade80]'
-              }`}
-              title={font.name}
-            >
-              {font.name}
-            </span>
-          </div>
-
-          <div className="flex items-center space-x-1 shrink-0 ml-1">
-            <span
-              className={`text-[10px] uppercase font-mono px-1 py-0.5 rounded ${
-                isLight ? 'bg-[#e2e8f0] text-[#475569]' : 'bg-[#252525] text-[#888888]'
-              }`}
-            >
-              {font.format}
-            </span>
-            {font.tags && font.tags.length > 0 && (
-              <span
-                className={`text-[9px] px-1 py-0.5 rounded font-medium truncate max-w-[65px] ${
-                  isLight ? 'bg-[#e2e8f0] text-[#475569]' : 'bg-[#222222] text-[#888888]'
-                }`}
-                title={font.tags.join(', ')}
-              >
-                {font.tags[0]}
-              </span>
-            )}
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onSelectFont?.(font);
-              }}
-              className={`p-1 rounded transition-colors ${
-                isSelected
-                  ? isLight
-                    ? 'text-[#0284c7] bg-[#dbeafe]'
-                    : 'text-[#38bdf8] bg-[#252525]'
-                  : isLight
-                  ? 'text-[#64748b] hover:text-[#0f172a]'
-                  : 'text-[#666666] hover:text-[#cccccc]'
-              }`}
-              title="View Font Properties"
-            >
-              <Info className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleFavorite(font.id);
-              }}
-              className={`p-1 rounded transition-colors ${
-                isLight ? 'hover:bg-[#f1f5f9]' : 'hover:bg-[#282828]'
-              }`}
-              title="Favorite"
-            >
-              <Heart
-                className={`w-3.5 h-3.5 transition-colors ${
-                  font.favorite
-                    ? 'text-[#ef4444] fill-[#ef4444]'
-                    : isLight
-                    ? 'text-[#94a3b8] hover:text-[#ef4444]'
-                    : 'text-[#666666] hover:text-[#ef4444]'
-                }`}
-              />
-            </button>
-          </div>
-        </div>
-
-        {/* Preview canvas */}
-        <div
-          onClick={(e) => {
-            e.stopPropagation();
-            onSelectFont?.(font);
-            onOpenDetail(font);
-          }}
-          style={{ backgroundColor: bgColor }}
-          className="p-4 flex-1 flex items-center justify-center cursor-pointer min-h-[120px] transition-colors relative"
-          title="Click to view full font details and alphabets"
-        >
-          <div
-            className={`w-full overflow-hidden break-words select-text ${alignClass}`}
+        {font.active && (
+          <div className="absolute top-2.5 right-2.5 w-1.5 h-1.5 rounded-full bg-[#22c55e]" />
+        )}
+        
+        <div className="flex-1 flex items-center justify-center w-full overflow-hidden">
+          <span
+            className="text-4xl select-none transition-transform group-hover:scale-105"
             style={{
               fontFamily: font.fontFamily,
               color: textColor,
-              fontSize: `${Math.min(fontSize, 56)}px`,
-              lineHeight: 1.25,
             }}
           >
-            {previewText || font.name}
-          </div>
+            Aa
+          </span>
         </div>
 
-        {/* Card footer */}
-        <div
-          className={`px-3 py-1.5 border-t flex items-center justify-between text-[11px] ${
-            isLight
-              ? 'bg-[#f8fafc] border-[#e2e8f0] text-[#64748b]'
-              : 'bg-[#171717] border-[#262626] text-[#777777]'
-          }`}
-        >
-          <span className="truncate max-w-[140px]" title={font.designer || 'Unknown'}>
-            {font.designer || `${font.stylesCount} styles`}
+        <div className="w-full text-center mt-1 flex flex-col items-center justify-end">
+          <div className={`text-xs font-medium truncate w-full ${isLight ? 'text-gray-900' : 'text-gray-200'}`}>
+            {font.name}
+          </div>
+          <span className="text-[10px] text-[#777777] mt-0.5">
+            {font.stylesCount || font.styles?.length || 1} {(font.stylesCount || font.styles?.length || 1) === 1 ? 'style' : 'styles'}
           </span>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpenDetail(font);
-            }}
-            className={`flex items-center space-x-0.5 ${
-              isLight
-                ? 'text-[#0f172a] hover:text-[#16a34a]'
-                : 'text-[#999999] hover:text-[#4ade80]'
-            }`}
-          >
-            <span>Alphabets & Details</span>
-            <ChevronRight className="w-3 h-3" />
-          </button>
         </div>
       </div>
     );

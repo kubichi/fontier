@@ -203,37 +203,32 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <aside
-      style={{ width: isNavOpen ? `${sidebarWidth + 44}px` : '44px' }}
+      style={{ width: isNavOpen ? `${sidebarWidth}px` : '44px' }}
       className={`border-r flex select-none shrink-0 h-full relative z-20 ${
         isLight
           ? 'bg-[#ffffff] border-[#e2e8f0] text-[#334155]'
           : 'bg-[#181818] border-[#262626] text-[#c8c8c8]'
       }`}
     >
-
-
-      {/* Mini leftmost icon rail */}
-      <div
-        className={`w-11 border-r flex flex-col items-center py-2.5 space-y-3.5 shrink-0 z-10 ${
-          isLight ? 'bg-[#f1f5f9] border-[#e2e8f0]' : 'bg-[#141414] border-[#222222]'
-        }`}
-      >
-        {/* Hamburger Menu Toggle Button */}
-        <button
-          onClick={() => setIsNavOpen((prev) => !prev)}
-          className={`p-1.5 rounded transition-colors ${
-            !isNavOpen
-              ? isLight
+      {/* Mini leftmost icon rail — ONLY shown when navigation drawer is collapsed */}
+      {!isNavOpen && (
+        <div
+          className={`w-11 border-r flex flex-col items-center py-2.5 space-y-3.5 shrink-0 z-10 ${
+            isLight ? 'bg-[#f1f5f9] border-[#e2e8f0]' : 'bg-[#141414] border-[#222222]'
+          }`}
+        >
+          {/* Hamburger Menu Toggle Button */}
+          <button
+            onClick={() => setIsNavOpen(true)}
+            className={`p-1.5 rounded transition-colors ${
+              isLight
                 ? 'text-[#16a34a] bg-[#dcfce7]'
                 : 'text-[#4ade80] bg-[#1e2e22]'
-              : isLight
-              ? 'text-[#64748b] hover:text-[#0f172a] hover:bg-[#e2e8f0]'
-              : 'text-[#888888] hover:text-white hover:bg-[#202020]'
-          }`}
-          title={isNavOpen ? 'Collapse navigation panel' : 'Expand navigation panel'}
-        >
-          <Menu className="w-4 h-4" />
-        </button>
+            }`}
+            title="Expand navigation panel"
+          >
+            <Menu className="w-4 h-4" />
+          </button>
 
         {/* Font Library Icon (Clicking reopens panel if closed) */}
         <button
@@ -310,6 +305,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <MoreHorizontal className="w-4 h-4" />
         </button>
       </div>
+      )}
 
       {/* Main navigation list (Dynamic width with Scaler) */}
       <div
@@ -318,6 +314,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
           isNavOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
         }`}
       >
+          {/* Header row with hamburger menu toggle and preferences button */}
+          <div className={`px-3 pt-2.5 pb-1 flex items-center justify-between border-b ${isLight ? 'border-[#e2e8f0]' : 'border-[#222222]'}`}>
+            <button
+              onClick={() => setIsNavOpen(false)}
+              className={`p-1.5 rounded transition-colors ${
+                isLight ? 'text-[#64748b] hover:text-[#0f172a] hover:bg-[#e2e8f0]' : 'text-[#888888] hover:text-white hover:bg-[#242424]'
+              }`}
+              title="Collapse sidebar"
+            >
+              <Menu className="w-4 h-4" />
+            </button>
+            <button
+              onClick={onOpenSettings}
+              className={`p-1.5 rounded transition-colors ${
+                isLight ? 'text-[#64748b] hover:text-[#0f172a] hover:bg-[#e2e8f0]' : 'text-[#888888] hover:text-white hover:bg-[#242424]'
+              }`}
+              title="Settings & Preferences"
+            >
+              <MoreHorizontal className="w-4 h-4" />
+            </button>
+          </div>
 
           <div
             className="overflow-y-auto no-scrollbar px-2 py-3 space-y-4 flex-1 text-xs"

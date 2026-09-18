@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, session, nativeTheme, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, session, nativeTheme, shell, clipboard, systemPreferences } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -19,8 +19,9 @@ function createWindow() {
     height: 850,
     minWidth: 960,
     minHeight: 640,
-    frame: process.platform === 'linux' ? true : false, // Native GTK window frame on Linux!
-    titleBarStyle: process.platform === 'linux' ? 'default' : 'hidden',
+    frame: process.platform === 'linux' ? true : false,
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : (process.platform === 'linux' ? 'default' : 'hidden'),
+    ...(process.platform === 'darwin' ? { trafficLightPosition: { x: 12, y: 12 } } : {}),
     backgroundColor: '#161616',
     icon: path.join(__dirname, '../public', iconFile),
     webPreferences: {
@@ -128,6 +129,21 @@ function createWindow() {
   // App Version IPC handler
   ipcMain.handle('get-app-version', () => {
     return app.getVersion();
+  });
+
+  ipcMain.handle('copy-to-clipboard', async (_, text) => {
+    clipboard.writeText(text);
+    return true;
+  });
+
+  ipcMain.handle('get-platform', () => process.platform);
+
+  ipcMain.handle('get-accent-color', () => {
+    try {
+      return '#' + systemPreferences.getAccentColor().substring(0, 6);
+    } catch(e) {
+      return '#22c55e';
+    }
   });
 
   // Remove default menu bar

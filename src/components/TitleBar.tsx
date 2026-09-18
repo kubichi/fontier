@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, SlidersHorizontal, Minus, Square, X, Check, RotateCcw } from 'lucide-react';
+import { Search, SlidersHorizontal, Minus, Square, X, Check, RotateCcw, Clock } from 'lucide-react';
 import { FontFilters } from '../types';
 
 interface TitleBarProps {
@@ -53,7 +53,72 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   const [showFilterMenu, setShowFilterMenu] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
   const filterMenuRef = useRef<HTMLDivElement>(null);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
   const isLight = theme === 'light';
+
+  const [platform, setPlatform] = useState<string>('win32');
+  useEffect(() => {
+    const api = (window as any).electronAPI || (window as any).electron;
+    if (typeof window !== 'undefined' && api?.getPlatform) {
+      api.getPlatform().then(setPlatform);
+    }
+  }, []);
+  const isMac = platform === 'darwin';
+
+  const [searchHistory, setSearchHistory] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('fontier_search_history');
+      return saved ? JSON.parse(saved) : [];
+    } catch { return []; }
+  });
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      saveSearchToHistory(searchQuery);
+    }
+  };
+
+  const saveSearchToHistory = (query: string) => {
+    const trimmed = query.trim();
+    if (!trimmed) return;
+    const newHistory = [trimmed, ...searchHistory.filter((h) => h !== trimmed)].slice(0, 12);
+    setSearchHistory(newHistory);
+    localStorage.setItem('fontier_search_history', JSON.stringify(newHistory));
+    setIsSearchFocused(false);
+  };
+
+  const removeHistoryItem = (e: React.MouseEvent, itemToRemove: string) => {
+    e.stopPropagation();
+    const newHistory = searchHistory.filter(h => h !== itemToRemove);
+    setSearchHistory(newHistory);
+    localStorage.setItem('fontier_search_history', JSON.stringify(newHistory));
+  };
+
+  const clearHistory = () => {
+    setSearchHistory([]);
+    localStorage.removeItem('fontier_search_history');
+  };
+  
+  const handleHistorySelect = (item: string) => {
+    onSearchChange(item);
+    saveSearchToHistory(item);
+  };
+
+  // Close search history popover on outside click
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
+        setIsSearchFocused(false);
+      }
+    }
+    if (isSearchFocused) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isSearchFocused]);
 
   // Desktop window actions
   const handleMinimize = () => {
@@ -117,7 +182,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
       }`}
     >
       {/* Left section: Clean application branding */}
-      <div className="flex items-center space-x-2 app-no-drag">
+      <div className={`flex items-center space-x-2 app-no-drag ${isMac ? 'pl-[76px]' : ''}`}>
         <span
           className={`font-semibold text-xs tracking-tight flex items-center gap-2 ${
             isLight ? 'text-[#0f172a]' : 'text-white'
@@ -130,7 +195,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
 
       {/* Middle section: Global Font Search & Filter Dropdown */}
       <div className="flex-1 max-w-xl mx-4 flex items-center justify-center relative app-no-drag" ref={filterMenuRef}>
-        <div className="relative w-full max-w-md">
+        <div className="relative w-full max-w-md" ref={searchContainerRef}>
           <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
             <Search className={`w-3.5 h-3.5 ${isLight ? 'text-[#94a3b8]' : 'text-[#666666]'}`} />
           </div>
@@ -139,6 +204,8 @@ export const TitleBar: React.FC<TitleBarProps> = ({
             type="text"
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
+            onFocus={() => setIsSearchFocused(true)}
+            onKeyDown={handleSearchKeyDown}
             placeholder="Search fonts by name, designer, format..."
             className={`w-full h-7 pl-8 pr-16 text-xs rounded-md border focus:outline-none transition-all ${
               isLight
@@ -185,6 +252,60 @@ export const TitleBar: React.FC<TitleBarProps> = ({
               )}
             </button>
           </div>
+
+          {/* Search History Dropdown */}
+          {isSearchFocused && searchHistory.length > 0 && (
+            <div
+              className={`absolute top-full left-0 right-0 mt-1 border rounded-lg shadow-xl z-50 overflow-hidden ${
+                isLight ? 'bg-[#ffffff] border-[#cbd5e1]' : 'bg-[#1e1e1e] border-[#333]'
+              }`}
+            >
+              {(() => {
+                const filteredHistory = searchQuery 
+                  ? searchHistory.filter(h => h.toLowerCase().includes(searchQuery.toLowerCase()))
+                  : searchHistory;
+                if (filteredHistory.length === 0) return null;
+                return (
+                  <div className="py-1">
+                    {filteredHistory.map((item, idx) => (
+                      <div
+                        key={idx}
+                        onClick={() => handleHistorySelect(item)}
+                        className={`flex items-center justify-between px-3 py-2 cursor-pointer text-xs transition-colors ${
+                          isLight ? 'hover:bg-[#f1f5f9] text-[#334155]' : 'hover:bg-[#2a2a2a] text-[#cccccc]'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Clock className={`w-3.5 h-3.5 ${isLight ? 'text-[#94a3b8]' : 'text-[#666]'}`} />
+                          <span>{item}</span>
+                        </div>
+                        <button
+                          onClick={(e) => removeHistoryItem(e, item)}
+                          className={`p-1 rounded hover:bg-black/10 dark:hover:bg-white/10 ${
+                            isLight ? 'text-[#94a3b8] hover:text-[#ef4444]' : 'text-[#666] hover:text-[#ef4444]'
+                          }`}
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                    {searchHistory.length > 0 && (
+                      <div className={`mt-1 pt-1 border-t ${isLight ? 'border-[#e2e8f0]' : 'border-[#333]'}`}>
+                        <button
+                          onClick={clearHistory}
+                          className={`w-full text-center px-3 py-2 text-[11px] font-medium transition-colors ${
+                            isLight ? 'text-[#0f172a] hover:bg-[#f1f5f9]' : 'text-[#a0a0a0] hover:bg-[#2a2a2a] hover:text-white'
+                          }`}
+                        >
+                          Clear search history
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
         </div>
 
         {/* Filter Dropdown Popover */}
@@ -347,7 +468,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
       </div>
 
       {/* Right section: Window Chrome */}
-      {showControls && (
+      {!isMac && showControls && (
         <div className="flex items-center space-x-1 app-no-drag">
           <button
             onClick={handleMinimize}
