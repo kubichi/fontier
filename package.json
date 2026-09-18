@@ -2,7 +2,7 @@
   "name": "fontier",
   "productName": "Fontier",
   "private": true,
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Fontier",
   "type": "module",
   "main": "electron/main.cjs",
@@ -47,7 +47,7 @@
         "zip"
       ],
       "category": "public.app-category.graphics-design",
-      "icon": "public/icon.png"
+      "icon": "public/fontier_icon.png"
     },
     "linux": {
       "target": [
@@ -56,7 +56,7 @@
         "tar.gz"
       ],
       "category": "Graphics",
-      "icon": "public/icon.png",
+      "icon": "public/fontier_icon.png",
       "desktop": {
         "StartupWMClass": "fontier",
         "Comment": "Font Viewer and Typography Manager",

@@ -12,7 +12,7 @@ app.commandLine.appendSwitch('js-flags', '--max-old-space-size=512');
 
 function createWindow() {
   const isWin = process.platform === 'win32';
-  const iconFile = isWin ? 'icon.ico' : 'icon.png';
+  const iconFile = isWin ? 'icon.ico' : 'fontier_icon.png';
   const mainWindow = new BrowserWindow({
     title: 'Fontier',
     width: 1280,

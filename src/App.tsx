@@ -1184,7 +1184,7 @@ export default function App() {
     if (currentFilter === 'recent') return 'Recent Fonts';
     if (currentFilter === 'provider-google') return 'Google Fonts Library';
     if (currentFilter === 'provider-local') return 'Local Font Files';
-    if (currentFilter === 'provider-system') return 'Windows System Fonts';
+    if (currentFilter === 'provider-system') return 'System Fonts';
     if (currentFilter === 'featured') return 'Featured Typefaces';
     return 'All Fonts';
   }, [currentFilter, folders]);

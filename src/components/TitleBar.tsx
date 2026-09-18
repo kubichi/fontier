@@ -187,14 +187,14 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   return (
     <header
       onDoubleClick={handleTitleBarDoubleClick}
-      className={`h-10 border-b flex items-center justify-between px-3 select-none text-xs z-30 shrink-0 transition-colors app-drag-region ${
+      className={`h-10 border-b flex items-center justify-between px-3 select-none text-xs z-30 shrink-0 transition-colors app-drag-region relative ${
         isLight
           ? 'bg-[#f8f9fa] border-[#e2e8f0] text-[#64748b]'
           : 'bg-[#161616] border-[#262626] text-[#a0a0a0]'
       }`}
     >
       {/* Left section: Clean application branding */}
-      <div className={`flex items-center space-x-2 app-no-drag ${isMac ? 'pl-[76px]' : ''}`}>
+      <div className={`flex items-center space-x-2 app-no-drag z-10 ${isMac ? 'pl-[76px]' : ''}`}>
         <span
           className={`font-semibold text-xs tracking-tight flex items-center gap-2 ${
             isLight ? 'text-[#0f172a]' : 'text-white'
@@ -205,9 +205,12 @@ export const TitleBar: React.FC<TitleBarProps> = ({
         </span>
       </div>
 
-      {/* Middle section: Global Font Search & Filter Dropdown */}
-      <div className="flex-1 max-w-xl mx-4 flex items-center justify-center relative app-no-drag" ref={filterMenuRef}>
-        <div className="relative w-full max-w-md" ref={searchContainerRef}>
+      {/* Middle section: Global Font Search & Filter Dropdown (Always perfectly centered on Windows, macOS, and Linux) */}
+      <div
+        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md flex items-center justify-center app-no-drag z-20"
+        ref={filterMenuRef}
+      >
+        <div className="relative w-full" ref={searchContainerRef}>
           <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
             <Search className={`w-3.5 h-3.5 ${isLight ? 'text-[#94a3b8]' : 'text-[#666666]'}`} />
           </div>
@@ -463,7 +466,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
                   <option value="all">All Sources</option>
                   <option value="local">Local Folder Only</option>
                   <option value="google">Google Fonts Only</option>
-                  <option value="system">Windows System Only</option>
+                  <option value="system">System Fonts Only</option>
                 </select>
               </div>
             </div>
@@ -473,7 +476,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
 
       {/* Right section: Window Chrome (Windows only) */}
       {!isMac && !isLinux && showControls && (
-        <div className="flex items-center space-x-1 app-no-drag">
+        <div className="flex items-center space-x-1 app-no-drag z-10">
           <button
             onClick={handleMinimize}
             className={`w-7 h-7 flex items-center justify-center rounded transition-colors ${

@@ -25,8 +25,8 @@ const COMMON_WINDOWS_FONTS: WindowsFontDef[] = [
   { name: 'Malgun Gothic', category: 'Sans Serif', tags: ['Sans Serif', 'East Asian', 'Clean'] },
   { name: 'Microsoft Sans Serif', category: 'Sans Serif', tags: ['Sans Serif', 'Legacy', 'System'] },
   { name: 'Palatino Linotype', category: 'Serif', tags: ['Serif', 'Classical', 'Book'] },
-  { name: 'Segoe UI', category: 'Sans Serif', tags: ['Sans Serif', 'Windows 11', 'Fluent', 'UI'] },
-  { name: 'Segoe UI Variable', category: 'Sans Serif', tags: ['Sans Serif', 'Windows 11', 'Variable'] },
+  { name: 'Segoe UI', category: 'Sans Serif', tags: ['Sans Serif', 'Fluent', 'UI'] },
+  { name: 'Segoe UI Variable', category: 'Sans Serif', tags: ['Sans Serif', 'Variable'] },
   { name: 'Segoe UI Emoji', category: 'Display', tags: ['Display', 'Emoji', 'Color'] },
   { name: 'Segoe UI Symbol', category: 'Display', tags: ['Display', 'Icon', 'Symbols'] },
   { name: 'SimSun', category: 'Serif', tags: ['Serif', 'CJK', 'Standard'] },
@@ -174,15 +174,15 @@ export async function detectWindowsSystemFonts(
           fontFamily: `"${familyName}"`,
           format: 'TTF',
           category: cat,
-          tags: ['Windows System', 'Installed', cat, `${data.styles.length} styles`],
+          tags: ['System Font', 'Installed', cat, `${data.styles.length} styles`],
           stylesCount: Math.max(1, data.styles.length),
           styles: data.styles.length > 0 ? data.styles : [{ name: 'Regular', weight: 400, style: 'normal' }],
           active: true,
           favorite: false,
           provider: 'System',
-          designer: 'Windows System Foundry',
+          designer: 'System Typography',
           version: `${data.styles.length} styles (${total} font files indexed)`,
-          license: 'Standard Microsoft Windows OS Font License',
+          license: 'Standard OS System Font License',
           postScriptName: data.postscriptNames[0] || '',
         });
 
@@ -197,7 +197,7 @@ export async function detectWindowsSystemFonts(
     }
   }
 
-  // 2. Add verified Windows System Fonts from catalog if not already added
+  // 2. Add verified System Fonts from catalog if not already added
   for (const def of COMMON_WINDOWS_FONTS) {
     if (!discoveredNames.has(def.name) && isFontAvailable(def.name)) {
       discoveredNames.add(def.name);
@@ -207,15 +207,15 @@ export async function detectWindowsSystemFonts(
         fontFamily: `"${def.name}", sans-serif`,
         format: 'TTF',
         category: def.category,
-        tags: ['Windows System', ...def.tags],
+        tags: ['System Font', ...def.tags],
         stylesCount: 1,
         styles: [{ name: 'Regular', weight: 400, style: 'normal' }],
         active: true,
         favorite: false,
         provider: 'System',
-        designer: 'Microsoft Typography',
-        version: 'Windows System Font',
-        license: 'Standard Microsoft Windows OS Font License',
+        designer: 'System Typography',
+        version: 'System Font',
+        license: 'Standard OS System Font License',
       });
     }
   }
