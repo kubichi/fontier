@@ -21,22 +21,38 @@ const FORMATS = [
   { label: 'WOFF2', value: 'woff2' },
 ];
 
-// Crisp inline vector logo that renders flawlessly in both web and Electron file:// environments
+// Crisp inline vector logo from user Illustrator design
 const FontierLogo: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) => (
   <svg
-    viewBox="0 0 160 160"
+    viewBox="0 0 160.62 160.62"
     className={`${className} shrink-0 rounded-xs shadow-xs select-none`}
-    fill="none"
     xmlns="http://www.w3.org/2000/svg"
   >
-    <rect x="2" y="2" width="156" height="156" rx="36" fill="#14161b" stroke="#2c303a" strokeWidth="4" />
+    <defs>
+      <radialGradient id="titlebar-radial-gradient" cx="80.31" cy="80.31" fx="80.31" fy="80.31" r="80.18" gradientUnits="userSpaceOnUse">
+        <stop offset="0" stopColor="#23232d" />
+        <stop offset="0.5" stopColor="#191920" />
+        <stop offset="1" stopColor="#14141a" />
+      </radialGradient>
+      <radialGradient id="titlebar-radial-gradient-2" cx="81.42" cy="79.39" fx="158.26" fy="88.03" r="77.33" gradientTransform="translate(0 -81.06) scale(1 2.02)" gradientUnits="userSpaceOnUse">
+        <stop offset="0" stopColor="#fff" />
+        <stop offset="0.16" stopColor="#fbfbfc" />
+        <stop offset="0.3" stopColor="#f1f1f3" />
+        <stop offset="0.44" stopColor="#dfe1e4" />
+        <stop offset="0.56" stopColor="#c6c9cf" />
+        <stop offset="0.69" stopColor="#a6abb4" />
+        <stop offset="0.81" stopColor="#7e8593" />
+        <stop offset="0.92" stopColor="#505a6c" />
+        <stop offset="1" stopColor="#2d394f" />
+      </radialGradient>
+    </defs>
+    <rect fill="url(#titlebar-radial-gradient)" x="0.12" y="0.12" width="160.37" height="160.37" rx="28" ry="28" />
     <path
-      d="M 140,36 L 140,50 L 62,50 C 44,50 36,60 36,78 L 36,122 L 22,122 L 22,76 C 22,48 38,36 64,36 Z"
-      fill="#ffffff"
-    />
-    <path
-      d="M 140,72 L 140,86 L 66,86 C 54,86 42,92 36,101 L 36,83 C 44,75 54,72 66,72 Z"
-      fill="#cfd6e0"
+      fill="url(#titlebar-radial-gradient-2)"
+      stroke="#ccc"
+      strokeMiterlimit="10"
+      strokeWidth="0.16"
+      d="M46.34,69.64c-1.41,3.08-2.11,6.33-2.11,9.75v15.98l18.49-10.55,15.17-8.84c2.28-1.27,4.72-1.91,7.34-1.91h44.12v10.75h-58.09c-2.68,0-5.16.64-7.44,1.91l-12.16,7.03c-3.95,2.35-6.33,5.7-7.14,10.05v10.75h-11.05v-35.17c0-6.36,1.57-12.24,4.72-17.64,3.15-5.39,7.42-9.66,12.81-12.81,5.39-3.15,11.27-4.72,17.64-4.72h60.7v10.75h-60.7c-4.89,0-9.36,1.36-13.42,4.07-4.05,2.71-7.02,6.25-8.89,10.6Z"
     />
   </svg>
 );

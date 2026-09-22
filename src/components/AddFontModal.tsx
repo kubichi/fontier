@@ -108,6 +108,14 @@ export const AddFontModal: React.FC<AddFontModalProps> = ({
         const ext = f.name.split('.').pop()?.toLowerCase();
         return ['ttf', 'otf', 'woff', 'woff2', 'ttc'].includes(ext || '');
       });
+      if (valid.length > 10) {
+        setStatusMessage({
+          type: 'error',
+          text: 'Selecting more than 10 individual files directly is limited for performance. Please use "Select Folder" instead to import large collections.',
+        });
+        e.target.value = '';
+        return;
+      }
       setFilesState(valid);
     }
     e.target.value = '';
@@ -157,7 +165,6 @@ export const AddFontModal: React.FC<AddFontModalProps> = ({
               parsedList.forEach((font) => onAddCustomFont(font));
             }
             onClose();
-            return;
           }
         }
       } catch (err) {
@@ -166,6 +173,7 @@ export const AddFontModal: React.FC<AddFontModalProps> = ({
         setIsProcessing(false);
         setProcessProgress('');
       }
+      return; // Return immediately to prevent opening a second web directory dialog
     }
 
     // 2. Web File System Access Directory Picker
@@ -180,7 +188,6 @@ export const AddFontModal: React.FC<AddFontModalProps> = ({
         const files: File[] = [];
         await scanDirectoryHandle(dirHandle, files);
         setFilesState(files, dirHandle.name);
-        return;
       } catch (err: any) {
         if (err.name === 'AbortError') return;
         console.warn('showDirectoryPicker fallback:', err);
@@ -188,6 +195,7 @@ export const AddFontModal: React.FC<AddFontModalProps> = ({
         setIsProcessing(false);
         setProcessProgress('');
       }
+      return;
     }
 
     // 3. Fallback: webkitdirectory input
@@ -264,7 +272,7 @@ export const AddFontModal: React.FC<AddFontModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4 backdrop-blur-xs select-none">
+    <div className="fixed inset-0 z-[100] bg-black/75 flex items-center justify-center p-4 backdrop-blur-md select-none">
       <div className="w-full max-w-lg bg-[#1e1e1e] border border-[#333333] rounded-lg shadow-2xl overflow-hidden text-[#d4d4d4]">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-[#2d2d2d] bg-[#1a1a1a]">

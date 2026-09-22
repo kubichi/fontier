@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { X, Moon, Sun, RotateCcw, Check, Sparkles, Palette } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { X, Moon, Sun, RotateCcw, Check, Palette } from 'lucide-react';
 import { AppSettings } from '../types';
 
 const ACCENT_PRESETS = [
@@ -30,7 +30,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onResetAllData,
 }) => {
   const [confirmReset, setConfirmReset] = useState(false);
-  const [appVersion, setAppVersion] = useState<string>('1.0.0');
+  const [appVersion, setAppVersion] = useState<string>('1.1.2');
+  const [localAccent, setLocalAccent] = useState<string>(settings.customAccentColor || '#38bdf8');
+  const debounceTimerRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (settings.customAccentColor) {
+      setLocalAccent(settings.customAccentColor);
+    }
+  }, [settings.customAccentColor]);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && (window as any).electronAPI) {
@@ -40,12 +48,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   }, []);
 
+  // Instant zero-lag live accent color application
+  const handleLiveAccentChange = useCallback((color: string) => {
+    setLocalAccent(color);
+    if (typeof document !== 'undefined') {
+      document.documentElement.style.setProperty('--accent-color', color);
+    }
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    debounceTimerRef.current = setTimeout(() => {
+      onUpdateSettings({ customAccentColor: color });
+    }, 120);
+  }, [onUpdateSettings]);
+
   if (!isOpen) return null;
 
   const isLight = settings.appTheme === 'light';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs select-none">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 backdrop-blur-md select-none p-4">
       <div
         className={`w-full max-w-md rounded-xl shadow-2xl overflow-hidden text-xs animate-in fade-in-50 zoom-in-95 duration-150 border ${
           isLight
@@ -62,7 +82,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <div className="flex items-center space-x-2">
             <span className="w-2 h-2 rounded-full bg-accent" />
             <h2 className={`text-sm font-semibold tracking-tight ${isLight ? 'text-[#0f172a]' : 'text-white'}`}>
-              Preferences & Settings
+              Preferences
             </h2>
           </div>
           <button
@@ -79,7 +99,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         </div>
 
         {/* Settings Body */}
-        <div className="p-5 space-y-5 max-h-[75vh] overflow-y-auto">
+        <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
           {/* Theme Selection: Black & White */}
           <div className="space-y-2">
             <label
@@ -95,7 +115,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 type="button"
                 id="theme-black-option"
                 onClick={() => onUpdateSettings({ appTheme: 'dark' })}
-                className={`p-3.5 rounded-lg border text-left flex flex-col justify-between transition-all relative ${
+                className={`p-3 rounded-lg border text-left flex flex-col justify-between transition-all relative ${
                   !isLight
                     ? 'border-accent bg-accent-subtle text-white ring-1 ring-accent'
                     : isLight
@@ -113,7 +133,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
                 <div>
                   <span className="font-semibold text-xs block text-white">Black Theme</span>
-                  <span className="text-[10px] text-[#888888]">Classic dark workstation</span>
                 </div>
               </button>
 
@@ -122,7 +141,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 type="button"
                 id="theme-white-option"
                 onClick={() => onUpdateSettings({ appTheme: 'light' })}
-                className={`p-3.5 rounded-lg border text-left flex flex-col justify-between transition-all relative ${
+                className={`p-3 rounded-lg border text-left flex flex-col justify-between transition-all relative ${
                   isLight
                     ? 'border-accent bg-accent-subtle text-[#0f172a] ring-1 ring-accent'
                     : 'border-[#2d2d2d] bg-[#161616] hover:bg-[#202020] text-[#aaaaaa]'
@@ -142,16 +161,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   >
                     White Theme
                   </span>
-                  <span className={`text-[10px] ${isLight ? 'text-[#64748b]' : 'text-[#888888]'}`}>
-                    Clean, high-contrast light
-                  </span>
                 </div>
               </button>
             </div>
           </div>
 
           {/* Custom Accent Color */}
-          <div className={`space-y-2 pt-2 border-t ${isLight ? 'border-[#e2e8f0]' : 'border-[#292929]'}`}>
+          <div className={`space-y-2 pt-3 border-t ${isLight ? 'border-[#e2e8f0]' : 'border-[#292929]'}`}>
             <div className="flex items-center justify-between">
               <label
                 className={`text-[11px] font-semibold uppercase tracking-wider block ${
@@ -160,32 +176,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               >
                 Accent Color
               </label>
-              <div className="flex items-center space-x-1.5">
-                <span className="text-[10px] text-[#888888] font-mono">
-                  {settings.customAccentColor || '#38bdf8'}
-                </span>
-                <label className="relative cursor-pointer w-5 h-5 rounded-full border border-white/20 overflow-hidden shrink-0 shadow-xs" title="Custom color picker">
-                  <input
-                    type="color"
-                    value={settings.customAccentColor || '#38bdf8'}
-                    onChange={(e) => onUpdateSettings({ customAccentColor: e.target.value })}
-                    className="absolute -inset-1 opacity-0 cursor-pointer w-7 h-7"
-                  />
-                  <span
-                    className="block w-full h-full"
-                    style={{ backgroundColor: settings.customAccentColor || '#38bdf8' }}
-                  />
-                </label>
-              </div>
+              <span className="text-[10px] text-[#888888] font-mono">
+                {localAccent}
+              </span>
             </div>
-            <div className="flex flex-wrap gap-2 pt-1">
+            <div className="flex flex-wrap items-center gap-2 pt-0.5">
               {ACCENT_PRESETS.map((preset) => {
-                const isSelected = (settings.customAccentColor || '#38bdf8').toLowerCase() === preset.color.toLowerCase();
+                const isSelected = localAccent.toLowerCase() === preset.color.toLowerCase();
                 return (
                   <button
                     key={preset.color}
                     type="button"
-                    onClick={() => onUpdateSettings({ customAccentColor: preset.color })}
+                    onClick={() => handleLiveAccentChange(preset.color)}
                     className={`w-7 h-7 rounded-full flex items-center justify-center transition-transform ${
                       isSelected ? 'scale-110 ring-2 ring-white/60 shadow-md' : 'hover:scale-105 opacity-80 hover:opacity-100'
                     }`}
@@ -196,23 +198,42 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </button>
                 );
               })}
+
+              {/* Accent Color Picker Button as a clean rectangle */}
+              <label
+                className={`relative cursor-pointer px-2.5 py-1.5 rounded-lg border text-xs font-medium shrink-0 flex items-center space-x-1.5 transition-colors shadow-xs ${
+                  isLight
+                    ? 'border-[#cbd5e1] bg-[#f8fafc] hover:bg-[#f1f5f9] text-[#0f172a]'
+                    : 'border-[#383838] bg-[#252525] hover:bg-[#2e2e2e] text-[#cccccc]'
+                }`}
+                title="Custom color picker"
+              >
+                <Palette className="w-3.5 h-3.5 text-accent" />
+                <span className="text-[11px] font-medium">Picker</span>
+                <input
+                  type="color"
+                  value={localAccent}
+                  onChange={(e) => handleLiveAccentChange(e.target.value)}
+                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                />
+              </label>
             </div>
           </div>
 
-          {/* Row Density */}
-          <div className={`space-y-2 pt-2 border-t ${isLight ? 'border-[#e2e8f0]' : 'border-[#292929]'}`}>
+          {/* INTERFACE (Row Density) */}
+          <div className={`space-y-2 pt-3 border-t ${isLight ? 'border-[#e2e8f0]' : 'border-[#292929]'}`}>
             <label
               className={`text-[11px] font-semibold uppercase tracking-wider block ${
                 isLight ? 'text-[#64748b]' : 'text-[#888888]'
               }`}
             >
-              Library List Density
+              INTERFACE
             </label>
             <div className="flex items-center space-x-2">
               <button
                 type="button"
                 onClick={() => onUpdateSettings({ rowDensity: 'comfortable' })}
-                className={`flex-1 py-2 px-3 rounded-md border text-center transition-colors ${
+                className={`flex-1 py-1.5 px-3 rounded-md border text-center transition-colors text-xs ${
                   settings.rowDensity === 'comfortable'
                     ? 'border-accent bg-accent-subtle text-accent font-semibold'
                     : isLight
@@ -220,12 +241,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     : 'border-[#2e2e2e] bg-[#161616] text-[#aaaaaa] hover:bg-[#222222]'
                 }`}
               >
-                Comfortable (Standard)
+                Comfortable
               </button>
               <button
                 type="button"
                 onClick={() => onUpdateSettings({ rowDensity: 'compact' })}
-                className={`flex-1 py-2 px-3 rounded-md border text-center transition-colors ${
+                className={`flex-1 py-1.5 px-3 rounded-md border text-center transition-colors text-xs ${
                   settings.rowDensity === 'compact'
                     ? 'border-accent bg-accent-subtle text-accent font-semibold'
                     : isLight
@@ -233,25 +254,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     : 'border-[#2e2e2e] bg-[#161616] text-[#aaaaaa] hover:bg-[#222222]'
                 }`}
               >
-                Compact (High Density)
+                Compact
               </button>
             </div>
           </div>
 
           {/* Auto-Activate on Import */}
           <div
-            className={`pt-2 border-t flex items-center justify-between py-1 ${
+            className={`pt-3 pb-1 border-t flex items-center justify-between ${
               isLight ? 'border-[#e2e8f0]' : 'border-[#292929]'
             }`}
           >
-            <div>
-              <span className={`text-xs font-medium block ${isLight ? 'text-[#0f172a]' : 'text-white'}`}>
-                Auto-activate on import
-              </span>
-              <span className={`text-[10px] ${isLight ? 'text-[#64748b]' : 'text-[#777777]'}`}>
-                Automatically mark newly imported local fonts as active
-              </span>
-            </div>
+            <span className={`text-xs font-medium block ${isLight ? 'text-[#0f172a]' : 'text-white'}`}>
+              Auto-activate on import
+            </span>
             <button
               type="button"
               onClick={() => onUpdateSettings({ autoActivateOnImport: !settings.autoActivateOnImport })}
@@ -273,18 +289,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
           {/* Window Chrome Controls Toggle */}
           <div
-            className={`pt-2 border-t flex items-center justify-between py-1 ${
+            className={`pt-3 pb-1 border-t flex items-center justify-between ${
               isLight ? 'border-[#e2e8f0]' : 'border-[#292929]'
             }`}
           >
-            <div>
-              <span className={`text-xs font-medium block ${isLight ? 'text-[#0f172a]' : 'text-white'}`}>
-                Software-native Window Controls
-              </span>
-              <span className={`text-[10px] ${isLight ? 'text-[#64748b]' : 'text-[#777777]'}`}>
-                Show minimize, maximize and close buttons in the in-app top bar
-              </span>
-            </div>
+            <span className={`text-xs font-medium block ${isLight ? 'text-[#0f172a]' : 'text-white'}`}>
+              Software-native window controls
+            </span>
             <button
               type="button"
               onClick={() =>
@@ -310,16 +321,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
           {/* About & Version */}
           <div
-            className={`pt-2.5 border-t flex items-center justify-between ${
+            className={`pt-3 border-t flex items-center justify-between ${
               isLight ? 'border-[#e2e8f0]' : 'border-[#292929]'
             }`}
           >
             <div>
-              <span className={`text-xs font-semibold ${isLight ? 'text-[#0f172a]' : 'text-white'}`}>
+              <span className={`text-xs font-semibold block ${isLight ? 'text-[#0f172a]' : 'text-white'}`}>
                 Fontier
-              </span>
-              <span className={`block text-[10px] ${isLight ? 'text-[#64748b]' : 'text-[#777777]'}`}>
-                Modern Typography and Font Manager
               </span>
             </div>
             <span className="px-2 py-0.5 rounded text-[11px] font-mono bg-white/5 text-[#a0a0a0] border border-white/10">
@@ -372,21 +380,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </div>
         </div>
 
-        {/* Footer & User Attribution */}
+        {/* Footer */}
         <div
-          className={`px-5 py-3 border-t flex items-center justify-between ${
+          className={`px-5 py-3 border-t flex items-center justify-end ${
             isLight ? 'bg-[#f8fafc] border-[#e2e8f0]' : 'bg-[#181818] border-[#2a2a2a]'
           }`}
         >
-          <div className="text-left select-text">
-            <p className="text-[11px] italic text-[#888888] leading-tight">
-              &ldquo;honestly, I don&apos;t know anymore&rdquo;
-            </p>
-            <p className="text-[10px] font-medium text-[#666666] tracking-tight mt-0.5">
-              vibecoded by Kubichi
-            </p>
-          </div>
-
           <button
             onClick={onClose}
             className={`px-4 py-1.5 text-xs font-medium rounded border transition-colors ${
@@ -402,4 +401,3 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     </div>
   );
 };
-

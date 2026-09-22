@@ -8,6 +8,8 @@ import { FontPropertiesPanel } from './components/FontPropertiesPanel';
 import { BottomPreviewBar } from './components/BottomPreviewBar';
 import { AddFontModal } from './components/AddFontModal';
 import { SettingsModal } from './components/SettingsModal';
+import { ManageProvidersModal } from './components/ManageProvidersModal';
+import { AVAILABLE_PROVIDERS } from './data/providersData';
 import { FontItem, FolderItem, TextAlignment, ViewMode, FontFilters, AppSettings } from './types';
 import { INITIAL_FONTS, INITIAL_FOLDERS } from './data/defaultFonts';
 import { parseFontFile, parseFontBuffer } from './utils/fontParser';
@@ -15,6 +17,7 @@ import { autoTagFontMetadata } from './utils/autoTagger';
 import { detectWindowsSystemFonts } from './utils/systemFonts';
 import { rehydrateAllStoredFonts } from './utils/fontStorage';
 import { scanDroppedItems, scanDirectoryHandle, scanDirectoryHandleWithPaths, ScannedFontFile } from './utils/fileScanner';
+import { fetchAllProvidersFonts } from './utils/providerFonts';
 
 import { Folder, Search, Plus, HardDrive, RefreshCw, X, Check } from 'lucide-react';
 
@@ -108,8 +111,29 @@ export default function App() {
   });
 
   const currentTheme: 'dark' | 'light' = appSettings.appTheme === 'light' ? 'light' : 'dark';
-  const isLight = currentTheme === 'light';
+  const [isLight, setIsLight] = useState<boolean>(currentTheme === 'light');
+  useEffect(() => {
+    setIsLight(currentTheme === 'light');
+  }, [currentTheme]);
   const [showSettingsModal, setShowSettingsModal] = useState<boolean>(false);
+  const [isManageProvidersOpen, setIsManageProvidersOpen] = useState<boolean>(false);
+  const [enabledProviders, setEnabledProviders] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('fontier_enabled_providers');
+      return saved ? JSON.parse(saved) : ['google', 'fontshare', 'openfoundry', 'freefaces', 'uncut', 'velvetyne', 'collletttivo'];
+    } catch {
+      return ['google', 'fontshare', 'openfoundry', 'freefaces', 'uncut', 'velvetyne', 'collletttivo'];
+    }
+  });
+  const handleToggleProvider = (id: string) => {
+    setEnabledProviders((prev) => {
+      const next = prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id];
+      try {
+        localStorage.setItem('fontier_enabled_providers', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
 
   const [currentFilter, setCurrentFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -247,6 +271,30 @@ export default function App() {
       .catch((err) => {
         console.warn('Could not rehydrate stored font binaries:', err);
       });
+  }, []);
+
+  // Fetch full provider catalogs (Fontshare, Google Fonts, Velvetyne, Collletttivo, UNCUT, Free Faces, Open Foundry)
+  useEffect(() => {
+    let isCancelled = false;
+
+    fetchAllProvidersFonts()
+      .then((incoming) => {
+        if (isCancelled || incoming.length === 0) return;
+
+        setFonts((prev) => {
+          const existingIds = new Set(prev.map((f) => f.id));
+          const unique = incoming.filter((f) => !existingIds.has(f.id));
+          if (unique.length === 0) return prev;
+          return [...prev, ...unique];
+        });
+      })
+      .catch((err) => {
+        console.warn('Provider fonts fetch error:', err);
+      });
+
+    return () => {
+      isCancelled = true;
+    };
   }, []);
 
 
@@ -442,7 +490,7 @@ export default function App() {
   // Create new folder
   const handleCreateFolder = (name: string, color?: string, parentId?: string): string => {
     const id = `folder-${Date.now()}`;
-    const newFolder: FolderItem = { id, name, color: color || '#eab308', parentId, collapsed: false };
+    const newFolder: FolderItem = { id, name, color: color || '#888888', parentId, collapsed: false };
     setFolders((prev) => [...prev, newFolder]);
     return id;
   };
@@ -571,7 +619,7 @@ export default function App() {
       const rootFolder: FolderItem = {
         id: rootFolderId,
         name: rootLabel,
-        color: '#eab308', // Default yellow folder color
+        color: '#888888', // Default gray folder color
         collapsed: false,
         folderPath: rootFolderPath,
       };
@@ -599,7 +647,7 @@ export default function App() {
               id: subId,
               name: parts[i],
               parentId: currentParentId, // NESTED UNDER ITS PARENT!
-              color: '#eab308', // Yellow as default for all subfolders!
+              color: '#888888', // Gray as default for all subfolders!
               folderPath: rootFolderPath ? `${rootFolderPath}/${currentPath}` : undefined,
               collapsed: false,
             });
@@ -699,7 +747,7 @@ export default function App() {
           const newFolder: FolderItem = {
             id: targetFolderId,
             name: folderLabel,
-            color: '#eab308',
+            color: '#888888',
           };
           setFolders((prev) => [...prev, newFolder]);
         } else {
@@ -1024,6 +1072,7 @@ export default function App() {
     let google = 0;
     let local = 0;
     let system = 0;
+    const byProvider: Record<string, number> = {};
 
     for (let i = 0; i < fonts.length; i++) {
       const f = fonts[i];
@@ -1033,6 +1082,12 @@ export default function App() {
       if (f.provider === 'Google') google++;
       else if (f.provider === 'Local') local++;
       else if (f.provider === 'System') system++;
+
+      const prov = f.provider || 'Local';
+      const cleanProv = prov.toLowerCase().replace(/[\s-_]/g, '');
+      byProvider[prov] = (byProvider[prov] || 0) + 1;
+      byProvider[cleanProv] = (byProvider[cleanProv] || 0) + 1;
+      byProvider[prov.toLowerCase()] = (byProvider[prov.toLowerCase()] || 0) + 1;
 
       if (f.folderId && byFolder[f.folderId] !== undefined) {
         byFolder[f.folderId]++;
@@ -1070,6 +1125,7 @@ export default function App() {
       local,
       system,
       byFolder: aggregatedByFolder,
+      byProvider,
     };
   }, [fonts, folders]);
 
@@ -1118,6 +1174,10 @@ export default function App() {
         if (f.provider !== 'Local') continue;
       } else if (currentFilter === 'provider-system') {
         if (f.provider !== 'System') continue;
+      } else if (currentFilter.startsWith('provider-')) {
+        const provKey = currentFilter.replace('provider-', '').toLowerCase().replace(/[\s-_]/g, '');
+        const fProvKey = (f.provider || '').toLowerCase().replace(/[\s-_]/g, '');
+        if (fProvKey !== provKey) continue;
       } else if (isFolder) {
         if (!f.folderId || !folderFilterIds.has(f.folderId)) continue;
       }
@@ -1185,6 +1245,16 @@ export default function App() {
     if (currentFilter === 'provider-google') return 'Google Fonts Library';
     if (currentFilter === 'provider-local') return 'Local Font Files';
     if (currentFilter === 'provider-system') return 'System Fonts';
+    if (currentFilter.startsWith('provider-')) {
+      const provKey = currentFilter.replace('provider-', '').toLowerCase();
+      if (provKey === 'fontshare') return 'Fontshare by ITF';
+      if (provKey === 'openfoundry') return 'Open Foundry';
+      if (provKey === 'freefaces') return 'Free Faces Gallery';
+      if (provKey === 'uncut') return 'UNCUT Catalogue';
+      if (provKey === 'velvetyne') return 'Velvetyne Type Foundry';
+      if (provKey === 'collletttivo') return 'Collletttivo Collective';
+      return 'Provider Fonts';
+    }
     if (currentFilter === 'featured') return 'Featured Typefaces';
     return 'All Fonts';
   }, [currentFilter, folders]);
@@ -1197,34 +1267,37 @@ export default function App() {
       : Math.max(96, Math.round(fontSize * 1.25) + 69);
   }, [appSettings.rowDensity, fontSize]);
 
-  const { listVisibleFonts, listTopSpacer, listBottomSpacer } = useMemo(() => {
+  const { listVisibleFonts, listTopSpacer, totalListHeight } = useMemo(() => {
     const total = filteredFonts.length;
-    if (total === 0) return { listVisibleFonts: [], listTopSpacer: 0, listBottomSpacer: 0 };
-    const overscan = 5;
+    const totalListHeight = total * listItemHeight;
+    if (total === 0) return { listVisibleFonts: [], listTopSpacer: 0, totalListHeight: 0 };
+    const overscan = 6;
     const visibleCount = Math.ceil(containerHeight / listItemHeight);
     const start = Math.max(0, Math.floor(scrollTop / listItemHeight) - overscan);
     const end = Math.min(total, start + visibleCount + overscan * 2);
     return {
       listVisibleFonts: filteredFonts.slice(start, end),
       listTopSpacer: start * listItemHeight,
-      listBottomSpacer: Math.max(0, (total - end) * listItemHeight),
+      totalListHeight,
     };
   }, [filteredFonts, scrollTop, containerHeight, listItemHeight]);
 
-  // Dynamic virtualization for Grid view: computes visible range & spacers
-  const { gridVisibleFonts, gridTopSpacer, gridBottomSpacer, gridCols } = useMemo(() => {
+  // Dynamic virtualization for Grid view: computes visible range & spacers (scaled 3 to 9 columns via slider)
+  const { gridVisibleFonts, gridTopSpacer, gridCols, totalGridHeight } = useMemo(() => {
     const total = filteredFonts.length;
-    if (total === 0) return { gridVisibleFonts: [], gridTopSpacer: 0, gridBottomSpacer: 0, gridCols: 6 };
+    if (total === 0) return { gridVisibleFonts: [], gridTopSpacer: 0, gridCols: 6, totalGridHeight: 0 };
 
-    // Explicitly compute column count and exact card height from containerWidth
-    const cardTargetWidth = 145;
+    // Dynamically compute column count from fontSize slider: scale from 9 columns down to 3 columns
     const availableWidth = Math.max(300, containerWidth - 32);
-    const cols = Math.max(2, Math.min(10, Math.floor(availableWidth / cardTargetWidth)));
+    const normalizedSize = Math.max(0, Math.min(1, (fontSize - 12) / (120 - 12)));
+    const targetCols = Math.round(9 - normalizedSize * (9 - 3)); // 9 down to 3
+    const cols = Math.max(3, Math.min(9, targetCols));
 
     const gap = 10; // gap-2.5 = 10px
     const cardWidth = Math.floor((availableWidth - (cols - 1) * gap) / cols);
     const cardHeight = cardWidth + gap;
     const totalRows = Math.ceil(total / cols);
+    const totalGridHeight = totalRows * cardHeight + 32;
     const visibleRows = Math.ceil(containerHeight / Math.max(1, cardHeight));
     const overscanRows = 6;
     const startRow = Math.max(0, Math.floor(scrollTop / Math.max(1, cardHeight)) - overscanRows);
@@ -1236,10 +1309,10 @@ export default function App() {
     return {
       gridVisibleFonts: filteredFonts.slice(startIdx, endIdx),
       gridTopSpacer: startRow * cardHeight,
-      gridBottomSpacer: Math.max(0, (totalRows - endRow) * cardHeight),
       gridCols: cols,
+      totalGridHeight,
     };
-  }, [filteredFonts, scrollTop, containerHeight, containerWidth]);
+  }, [filteredFonts, scrollTop, containerHeight, containerWidth, fontSize]);
 
   return (
     <div
@@ -1346,6 +1419,9 @@ export default function App() {
           onMoveFolderDown={handleMoveFolderDown}
           onRescanFolder={handleRescanFolder}
           counts={counts}
+          enabledProviders={enabledProviders}
+          onToggleProvider={handleToggleProvider}
+          onOpenManageProviders={() => setIsManageProvidersOpen(true)}
           onOpenAddModal={() => setIsAddModalOpen(true)}
           onOpenLocalFolder={handleOpenLocalFolder}
           onOpenSettings={() => setShowSettingsModal(true)}
@@ -1451,9 +1527,6 @@ export default function App() {
                       <span>Rescan</span>
                     </button>
                   )}
-                  <span className={`text-[11px] ${isLight ? 'text-[#94a3b8]' : 'text-[#666666]'}`}>
-                    Click any font row to inspect properties
-                  </span>
                 </div>
               </div>
 
@@ -1463,6 +1536,7 @@ export default function App() {
                 <div
                   ref={fontListContainerRef}
                   onScroll={handleFontListScroll}
+                  style={{ overflowAnchor: 'none' }}
                   className={`flex-1 overflow-y-auto ${
                     isLight ? 'bg-[#ffffff]' : 'bg-[#181818]'
                   }`}
@@ -1498,15 +1572,8 @@ export default function App() {
                       </p>
                       <div className="flex items-center space-x-2">
                         <button
-                          onClick={handleOpenLocalFolder}
-                          className="px-3 py-1.5 bg-[#1e293b] hover:bg-[#283852] text-accent text-xs rounded border border-accent-subtle transition-colors flex items-center space-x-1.5"
-                        >
-                          <HardDrive className="w-3.5 h-3.5" />
-                          <span>Open Local Fonts Folder</span>
-                        </button>
-                        <button
                           onClick={() => setIsAddModalOpen(true)}
-                          className={`px-3 py-1.5 text-xs rounded border transition-colors flex items-center space-x-1.5 ${
+                          className={`px-3.5 py-1.5 text-xs rounded border transition-colors flex items-center space-x-1.5 ${
                             isLight
                               ? 'bg-white hover:bg-[#f1f5f9] text-[#0f172a] border-[#cbd5e1]'
                               : 'bg-[#252525] hover:bg-[#2f2f2f] text-white border-[#383838]'
@@ -1518,11 +1585,17 @@ export default function App() {
                       </div>
                     </div>
                   ) : viewMode === 'grid' ? (
-                    <div className="p-4">
-                      {gridTopSpacer > 0 && <div style={{ height: `${gridTopSpacer}px` }} />}
+                    <div style={{ height: `${totalGridHeight}px`, position: 'relative', width: '100%' }} className="p-4">
                       <div
-                        className="grid gap-2.5"
-                        style={{ gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` }}
+                        style={{
+                          position: 'absolute',
+                          top: `${gridTopSpacer + 16}px`,
+                          left: 16,
+                          right: 16,
+                          display: 'grid',
+                          gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))`,
+                          gap: '10px',
+                        }}
                       >
                         {gridVisibleFonts.map((font) => (
                           <FontRow
@@ -1547,12 +1620,11 @@ export default function App() {
                           />
                         ))}
                       </div>
-                      {gridBottomSpacer > 0 && <div style={{ height: `${gridBottomSpacer}px` }} />}
                     </div>
                   ) : (
-                    <div>
-                      {listTopSpacer > 0 && <div style={{ height: `${listTopSpacer}px` }} />}
+                    <div style={{ height: `${totalListHeight}px`, position: 'relative', width: '100%' }}>
                       <div
+                        style={{ position: 'absolute', top: `${listTopSpacer}px`, left: 0, right: 0 }}
                         className={`divide-y ${
                           isLight ? 'divide-[#f1f5f9]' : 'divide-[#222222]'
                         }`}
@@ -1580,7 +1652,6 @@ export default function App() {
                           />
                         ))}
                       </div>
-                      {listBottomSpacer > 0 && <div style={{ height: `${listBottomSpacer}px` }} />}
                     </div>
                   )}
 
@@ -1588,7 +1659,7 @@ export default function App() {
                   {filteredFonts.length > 0 && (
                     <div className="py-3 flex items-center justify-center border-t border-[#252525]/30">
                       <span className={`text-[11px] ${isLight ? 'text-slate-400' : 'text-[#666666]'}`}>
-                        {filteredFonts.length} {filteredFonts.length === 1 ? 'font' : 'fonts'} loaded • Virtualized memory cache active
+                        {filteredFonts.length} {filteredFonts.length === 1 ? 'font' : 'fonts'} loaded
                       </span>
                     </div>
                   )}
@@ -1638,6 +1709,16 @@ export default function App() {
         settings={appSettings}
         onUpdateSettings={handleUpdateSettings}
         onResetAllData={handleResetAllData}
+      />
+
+      {/* 6. Manage Providers & Foundries Modal */}
+      <ManageProvidersModal
+        isOpen={isManageProvidersOpen}
+        onClose={() => setIsManageProvidersOpen(false)}
+        enabledProviders={enabledProviders}
+        onToggleProvider={handleToggleProvider}
+        counts={counts.byProvider}
+        theme={currentTheme}
       />
     </div>
   );

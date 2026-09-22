@@ -10,7 +10,6 @@ import {
   Sun,
   Moon,
   Type,
-  Info,
   Plus,
   Trash2,
 } from 'lucide-react';
@@ -264,7 +263,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             >
               {/* Header with Dark / Light toggle moved inside */}
               <div
-                className={`pb-2.5 mb-3 border-b flex items-center justify-between ${
+                className={`pb-2 mb-3 border-b flex items-center justify-between ${
                   isLight ? 'border-[#e2e8f0]' : 'border-[#303030]'
                 }`}
               >
@@ -272,34 +271,33 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                   <span className={`text-xs font-semibold block ${isLight ? 'text-[#0f172a]' : 'text-white'}`}>
                     Preview Colors
                   </span>
-                  <span className={`text-[10px] ${isLight ? 'text-[#64748b]' : 'text-[#888888]'}`}>
-                    Customize font canvas & text
-                  </span>
                 </div>
 
-                {/* Dark / Light Toggle Pill inside Colors Tab */}
-                <button
-                  type="button"
-                  onClick={toggleLightDark}
-                  className={`flex items-center px-2 py-1 rounded border transition-colors gap-1.5 ${
-                    isLight
-                      ? 'bg-[#f1f5f9] hover:bg-[#e2e8f0] text-[#0f172a] border-[#cbd5e1]'
-                      : 'bg-[#282828] hover:bg-[#323232] text-[#cccccc] border-[#3c3c3c]'
-                  }`}
-                  title="Toggle between light and dark preview"
-                >
-                  {isLightMode ? (
-                    <>
-                      <Sun className="w-3 h-3 text-[#eab308]" />
-                      <span className="text-[11px] font-medium">Light</span>
-                    </>
-                  ) : (
-                    <>
-                      <Moon className="w-3 h-3 text-accent" />
-                      <span className="text-[11px] font-medium">Dark</span>
-                    </>
-                  )}
-                </button>
+                {/* Dark / Light Toggle Pill inside Colors Tab (Only in List view) */}
+                {viewMode === 'list' && (
+                  <button
+                    type="button"
+                    onClick={toggleLightDark}
+                    className={`flex items-center px-2 py-1 rounded border transition-colors gap-1.5 ${
+                      isLight
+                        ? 'bg-[#f1f5f9] hover:bg-[#e2e8f0] text-[#0f172a] border-[#cbd5e1]'
+                        : 'bg-[#282828] hover:bg-[#323232] text-[#cccccc] border-[#3c3c3c]'
+                    }`}
+                    title="Toggle between light and dark preview"
+                  >
+                    {isLightMode ? (
+                      <>
+                        <Sun className="w-3 h-3 text-[#eab308]" />
+                        <span className="text-[11px] font-medium">Light</span>
+                      </>
+                    ) : (
+                      <>
+                        <Moon className="w-3 h-3 text-accent" />
+                        <span className="text-[11px] font-medium">Dark</span>
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
 
               {/* Text Color Setting */}
@@ -474,24 +472,6 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         >
           <RotateCcw className="w-3.5 h-3.5" />
         </button>
-
-        {onToggleInspector && (
-          <button
-            id="toggle-font-properties-btn"
-            onClick={onToggleInspector}
-            className={`flex items-center space-x-1 px-2 py-1 text-xs rounded transition-colors border ${
-              showInspector
-                ? 'bg-accent-subtle text-accent border-accent-subtle'
-                : isLight
-                ? 'text-[#64748b] hover:text-[#0f172a] border-transparent hover:bg-[#f1f5f9]'
-                : 'text-[#888888] hover:text-[#dddddd] border-transparent hover:bg-[#252525]'
-            }`}
-            title="Toggle Font Properties Inspector panel"
-          >
-            <Info className="w-3.5 h-3.5" />
-            <span className="hidden md:inline text-[11px]">Properties</span>
-          </button>
-        )}
       </div>
     </div>
   );

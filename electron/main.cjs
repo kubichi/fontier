@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, session, nativeTheme, shell, clipboard, systemPreferences } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, session, nativeTheme, shell, clipboard, systemPreferences, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -12,7 +12,23 @@ app.commandLine.appendSwitch('js-flags', '--max-old-space-size=512');
 
 function createWindow() {
   const isWin = process.platform === 'win32';
-  const iconFile = isWin ? 'icon.ico' : 'fontier_icon.png';
+  const iconCandidates = isWin
+    ? [
+        path.join(__dirname, '../public/icon.ico'),
+        path.join(__dirname, '../dist/icon.ico'),
+        path.join(__dirname, '../build/icon.ico'),
+        path.join(__dirname, '../public/icon.png'),
+        path.join(__dirname, '../dist/icon.png'),
+      ]
+    : [
+        path.join(__dirname, '../public/icon.png'),
+        path.join(__dirname, '../dist/icon.png'),
+        path.join(__dirname, '../public/fontier_icon.png'),
+      ];
+
+  let resolvedIconPath = iconCandidates.find((p) => fs.existsSync(p)) || path.join(__dirname, '../public/icon.ico');
+  const appIcon = fs.existsSync(resolvedIconPath) ? nativeImage.createFromPath(resolvedIconPath) : undefined;
+
   const mainWindow = new BrowserWindow({
     title: 'Fontier',
     width: 1280,
@@ -23,7 +39,7 @@ function createWindow() {
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : (process.platform === 'linux' ? 'default' : 'hidden'),
     ...(process.platform === 'darwin' ? { trafficLightPosition: { x: 12, y: 12 } } : {}),
     backgroundColor: '#161616',
-    icon: path.join(__dirname, '../public', iconFile),
+    icon: appIcon || resolvedIconPath,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -33,20 +49,47 @@ function createWindow() {
     },
   });
 
+  if (isWin && appIcon) {
+    mainWindow.setIcon(appIcon);
+  }
+
+  // Remove default menu bar
+  mainWindow.setMenuBarVisibility(false);
+
+  // Load app (production build or local dev server)
+  const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+  if (isDev) {
+    mainWindow.loadURL(process.env.ELECTRON_DEV_URL || 'http://localhost:3000');
+  } else {
+    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+  }
+}
+
+function registerIpcHandlers() {
   // Window control IPC handlers
-  ipcMain.on('window-minimize', () => mainWindow.minimize());
-  ipcMain.on('window-maximize', () => {
-    if (mainWindow.isMaximized()) {
-      mainWindow.unmaximize();
-    } else {
-      mainWindow.maximize();
+  ipcMain.on('window-minimize', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender) || BrowserWindow.getFocusedWindow();
+    if (win) win.minimize();
+  });
+  ipcMain.on('window-maximize', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender) || BrowserWindow.getFocusedWindow();
+    if (win) {
+      if (win.isMaximized()) {
+        win.unmaximize();
+      } else {
+        win.maximize();
+      }
     }
   });
-  ipcMain.on('window-close', () => mainWindow.close());
+  ipcMain.on('window-close', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender) || BrowserWindow.getFocusedWindow();
+    if (win) win.close();
+  });
 
   // Native folder selection dialog with recursive subfolder traversal (RAM-optimized: paths & stats only)
-  ipcMain.handle('select-directory', async () => {
-    const result = await dialog.showOpenDialog(mainWindow, {
+  ipcMain.handle('select-directory', async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender) || BrowserWindow.getFocusedWindow() || undefined;
+    const result = await dialog.showOpenDialog(win, {
       properties: ['openDirectory'],
       title: 'Select Font Directory (Scans all subfolders)',
     });
@@ -142,23 +185,14 @@ function createWindow() {
     try {
       return '#' + systemPreferences.getAccentColor().substring(0, 6);
     } catch(e) {
-      return '#22c55e';
+      return '#38bdf8';
     }
   });
-
-  // Remove default menu bar
-  mainWindow.setMenuBarVisibility(false);
-
-  // Load app (production build or local dev server)
-  const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
-  if (isDev) {
-    mainWindow.loadURL(process.env.ELECTRON_DEV_URL || 'http://localhost:3000');
-  } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
-  }
 }
 
 app.whenReady().then(() => {
+  registerIpcHandlers();
+
   // Auto-grant permission for local system fonts access (window.queryLocalFonts)
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
     if (permission === 'local-fonts') {

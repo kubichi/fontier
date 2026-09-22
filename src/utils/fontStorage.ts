@@ -45,8 +45,8 @@ class FontLRUCache {
   keys(): IterableIterator<string> { return this.cache.keys(); }
 }
 
-// Keep active in-memory font cache balanced (120 fonts max) to keep RAM low without thrashing
-const fontCache = new FontLRUCache(120);
+// Keep active in-memory font cache balanced (500 fonts max) to keep RAM low without thrashing during fast scrolling
+const fontCache = new FontLRUCache(500);
 
 export function unregisterFont(font: { fontFamily: string }): void {
   const cleanFamily = font.fontFamily.split(',')[0].replace(/['"]/g, '').trim();
@@ -118,7 +118,7 @@ export async function registerFontFace(familyName: string, buffer: ArrayBuffer):
     const blob = new Blob([buffer], { type: 'font/truetype' });
     blobUrl = URL.createObjectURL(blob);
 
-    const face = new FontFace(cleanFamily, 'url("' + blobUrl + '")');
+    const face = new FontFace(cleanFamily, 'url("' + blobUrl + '")', { display: 'swap' });
     await face.load();
     document.fonts.add(face);
     
@@ -193,9 +193,22 @@ const pendingLoads = new Map<string, Promise<boolean>>();
  * On-demand lazy font loader with duplicate request prevention and failure caching.
  */
 export async function ensureFontLoaded(font: { id: string; fontFamily: string; filePath?: string; provider: string }): Promise<boolean> {
-  if (font.provider !== 'Local') return true;
   const cleanFamily = font.fontFamily.split(',')[0].replace(/['"]/g, '').trim();
   if (!cleanFamily) return false;
+
+  if (font.provider === 'Google') {
+    const id = `gf-${cleanFamily.replace(/\s+/g, '-').toLowerCase()}`;
+    if (typeof document !== 'undefined' && !document.getElementById(id)) {
+      const link = document.createElement('link');
+      link.id = id;
+      link.rel = 'stylesheet';
+      link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(cleanFamily)}:ital,wght@0,100..900;1,100..900&display=swap`;
+      document.head.appendChild(link);
+    }
+    return true;
+  }
+
+  if (font.provider !== 'Local') return true;
   
   if (fontCache.get(cleanFamily)) {
     return true; // Already loaded and promoted

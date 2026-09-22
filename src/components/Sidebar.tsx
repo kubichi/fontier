@@ -20,11 +20,14 @@ import {
   CheckSquare,
   Square,
   AlertTriangle,
+  Globe,
 } from 'lucide-react';
 import { FolderItem } from '../types';
+import { ManageProvidersModal } from './ManageProvidersModal';
+import { AVAILABLE_PROVIDERS } from '../data/providersData';
 
 const FOLDER_COLORS = [
-  '#eab308', // Yellow (Default folder color)
+  '#888888', // Gray (Default folder color)
   '#f59e0b', // Amber
   '#3b82f6', // Blue
   '#22c55e', // Green
@@ -32,7 +35,7 @@ const FOLDER_COLORS = [
   '#8b5cf6', // Purple
   '#ef4444', // Red
   '#06b6d4', // Cyan
-  '#888888', // Gray
+  '#eab308', // Yellow
 ];
 
 interface SidebarProps {
@@ -57,10 +60,14 @@ interface SidebarProps {
     google: number;
     local: number;
     system?: number;
+    byProvider?: Record<string, number>;
   };
+  enabledProviders?: string[];
+  onToggleProvider?: (providerId: string) => void;
   onOpenAddModal: () => void;
   onOpenLocalFolder: () => void;
   onOpenSettings?: () => void;
+  onOpenManageProviders?: () => void;
   watchedFolder?: { name: string; count: number; id?: string };
   onRescanLocalFolder?: () => void;
   theme?: 'dark' | 'light';
@@ -79,9 +86,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onMoveFolderDown,
   onRescanFolder,
   counts,
+  enabledProviders: propEnabledProviders,
+  onToggleProvider: propOnToggleProvider,
   onOpenAddModal,
   onOpenLocalFolder,
   onOpenSettings,
+  onOpenManageProviders,
   watchedFolder,
   onRescanLocalFolder,
   theme = 'dark',
@@ -91,9 +101,35 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [providersOpen, setProvidersOpen] = useState(true);
   const [foldersOpen, setFoldersOpen] = useState(true);
   const [newFolderName, setNewFolderName] = useState('');
-  const [newFolderColor, setNewFolderColor] = useState('#eab308');
+  const [newFolderColor, setNewFolderColor] = useState('#888888');
   const [showFolderInput, setShowFolderInput] = useState(false);
   const [activeColorPickerFolderId, setActiveColorPickerFolderId] = useState<string | null>(null);
+  const [isManageProvidersOpen, setIsManageProvidersOpen] = useState(false);
+
+  // Local state for enabled providers if not passed via props
+  const [localEnabledProviders, setLocalEnabledProviders] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('fontier_enabled_providers');
+      return saved ? JSON.parse(saved) : ['google', 'fontshare', 'openfoundry', 'freefaces', 'uncut', 'velvetyne', 'collletttivo'];
+    } catch {
+      return ['google', 'fontshare', 'openfoundry', 'freefaces', 'uncut', 'velvetyne', 'collletttivo'];
+    }
+  });
+
+  const enabledProviders = propEnabledProviders || localEnabledProviders;
+  const handleToggleProvider = (id: string) => {
+    if (propOnToggleProvider) {
+      propOnToggleProvider(id);
+    } else {
+      setLocalEnabledProviders((prev) => {
+        const next = prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id];
+        try {
+          localStorage.setItem('fontier_enabled_providers', JSON.stringify(next));
+        } catch {}
+        return next;
+      });
+    }
+  };
 
   // Scaler / Resizer state (default 260px, min 180px, max 750px)
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
@@ -226,79 +262,65 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <Menu className="w-4 h-4" />
           </button>
 
-        {/* Font Library Icon (Clicking reopens panel if closed) */}
-        <button
-          onClick={() => {
-            onSelectFilter('all');
-            setIsNavOpen(true);
-          }}
-          className={`p-1.5 rounded transition-colors ${
-            currentFilter === 'all'
-              ? 'text-accent bg-accent-subtle'
-              : isLight
-              ? 'text-[#64748b] hover:text-[#0f172a] hover:bg-[#e2e8f0]'
-              : 'text-[#888888] hover:text-white hover:bg-[#202020]'
-          }`}
-          title="Font Library"
-        >
-          <Layers className="w-4 h-4" />
-        </button>
+          {/* Favorites Icon */}
+          <button
+            onClick={() => {
+              onSelectFilter('favorites');
+              setIsNavOpen(true);
+            }}
+            className={`p-1.5 rounded transition-colors ${
+              currentFilter === 'favorites'
+                ? isLight
+                  ? 'text-[#ef4444] bg-[#fee2e2]'
+                  : 'text-[#ef4444] bg-[#351818]'
+                : isLight
+                ? 'text-[#888888] hover:text-[#ef4444] hover:bg-[#e2e8f0]'
+                : 'text-[#888888] hover:text-[#ef4444] hover:bg-[#202020]'
+            }`}
+            title="Favorites"
+          >
+            <Heart className="w-4 h-4" />
+          </button>
 
-        {/* Favorites Icon: grayish heart icon by default, highlighting appropriately */}
-        <button
-          onClick={() => {
-            onSelectFilter('favorites');
-            setIsNavOpen(true);
-          }}
-          className={`p-1.5 rounded transition-colors ${
-            currentFilter === 'favorites'
-              ? isLight
-                ? 'text-[#ef4444] bg-[#fee2e2]'
-                : 'text-[#ef4444] bg-[#351818]'
-              : isLight
-              ? 'text-[#888888] hover:text-[#ef4444] hover:bg-[#e2e8f0]'
-              : 'text-[#888888] hover:text-[#ef4444] hover:bg-[#202020]'
-          }`}
-          title="Favorites"
-        >
-          <Heart className="w-4 h-4" />
-        </button>
+          {/* Folders Icon - Expands and scrolls down to folders */}
+          <button
+            onClick={() => {
+              setFoldersOpen(true);
+              setIsNavOpen(true);
+              setTimeout(() => {
+                const el = document.getElementById('folders-section');
+                if (el) el.scrollIntoView({ behavior: 'smooth' });
+              }, 50);
+            }}
+            className={`p-1.5 rounded transition-colors ${
+              currentFilter.startsWith('folder-')
+                ? isLight
+                  ? 'text-[#0f172a] bg-[#e2e8f0]'
+                  : 'text-white bg-[#2b2b2b]'
+                : isLight
+                ? 'text-[#888888] hover:text-[#0f172a] hover:bg-[#e2e8f0]'
+                : 'text-[#888888] hover:text-white hover:bg-[#202020]'
+            }`}
+            title="Folders"
+          >
+            <FolderIcon className="w-4 h-4" />
+          </button>
 
-        {/* Folders Icon (grayish like before) */}
-        <button
-          onClick={() => {
-            setFoldersOpen(true);
-            setIsNavOpen(true);
-          }}
-          className={`p-1.5 rounded transition-colors ${
-            currentFilter.startsWith('folder-')
-              ? isLight
-                ? 'text-[#0f172a] bg-[#e2e8f0]'
-                : 'text-white bg-[#2b2b2b]'
-              : isLight
-              ? 'text-[#888888] hover:text-[#0f172a] hover:bg-[#e2e8f0]'
-              : 'text-[#888888] hover:text-white hover:bg-[#202020]'
-          }`}
-          title="Folders"
-        >
-          <FolderIcon className="w-4 h-4" />
-        </button>
+          <div className="flex-1" />
 
-        <div className="flex-1" />
-
-        {/* 3 Round Dots Icon (Settings & Preferences Option) */}
-        <button
-          onClick={onOpenSettings}
-          className={`p-1.5 rounded transition-colors ${
-            isLight
-              ? 'text-[#64748b] hover:text-[#0f172a] hover:bg-[#e2e8f0]'
-              : 'text-[#888888] hover:text-white hover:bg-[#242424]'
-          }`}
-          title="Settings & Preferences"
-        >
-          <MoreHorizontal className="w-4 h-4" />
-        </button>
-      </div>
+          {/* 3 Round Dots Icon (Settings & Preferences) */}
+          <button
+            onClick={onOpenSettings}
+            className={`p-1.5 rounded transition-colors ${
+              isLight
+                ? 'text-[#64748b] hover:text-[#0f172a] hover:bg-[#e2e8f0]'
+                : 'text-[#888888] hover:text-white hover:bg-[#242424]'
+            }`}
+            title="Settings & Preferences"
+          >
+            <MoreHorizontal className="w-4 h-4" />
+          </button>
+        </div>
       )}
 
       {/* Main navigation list (Dynamic width with Scaler) */}
@@ -467,30 +489,115 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </button>
             </div>
 
-            {/* COLLECTIONS Section */}
+            {/* PROVIDERS Section */}
             <div className={`pt-2 border-t ${isLight ? 'border-[#e2e8f0]' : 'border-[#242424]'}`}>
-              <button
-                onClick={() => setCollectionsOpen(!collectionsOpen)}
-                className={`w-full flex items-center justify-between py-1 px-1 text-[11px] font-semibold uppercase tracking-wider ${
-                  isLight ? 'text-[#64748b] hover:text-[#0f172a]' : 'text-[#888888] hover:text-[#cccccc]'
+              <div
+                className={`flex items-center justify-between py-1 px-1 text-[11px] font-semibold uppercase tracking-wider ${
+                  isLight ? 'text-[#64748b]' : 'text-[#888888]'
                 }`}
               >
-                <span className="flex items-center space-x-1">
-                  {collectionsOpen ? (
+                <button
+                  onClick={() => setProvidersOpen(!providersOpen)}
+                  className={`flex items-center space-x-1 ${
+                    isLight ? 'hover:text-[#0f172a]' : 'hover:text-[#cccccc]'
+                  }`}
+                >
+                  {providersOpen ? (
                     <ChevronDown className="w-3 h-3" />
                   ) : (
                     <ChevronRight className="w-3 h-3" />
                   )}
-                  <span>Collections</span>
-                </span>
-              </button>
+                  <span>Providers</span>
+                </button>
 
-              {collectionsOpen && (
+                <button
+                  onClick={() => {
+                    if (onOpenManageProviders) onOpenManageProviders();
+                    else setIsManageProvidersOpen(true);
+                  }}
+                  className={`transition-colors p-0.5 rounded ${
+                    isLight
+                      ? 'text-[#64748b] hover:text-[#0f172a] hover:bg-slate-200'
+                      : 'text-[#888888] hover:text-white hover:bg-neutral-800'
+                  }`}
+                  title="Manage font providers and foundries"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {providersOpen && (
                 <div className="mt-1 space-y-0.5 pl-2">
+                  {/* Google Fonts */}
+                  {enabledProviders.includes('google') && (
+                    <button
+                      onClick={() => onSelectFilter('provider-google')}
+                      className={`w-full flex items-center justify-between px-2 py-1.5 rounded text-left transition-colors ${
+                        currentFilter === 'provider-google'
+                          ? isLight
+                            ? 'bg-[#e2e8f0] text-[#0f172a] font-semibold'
+                            : 'bg-[#2b2b2b] text-white font-medium'
+                          : isLight
+                          ? 'text-[#475569] hover:text-[#0f172a] hover:bg-[#f1f5f9]'
+                          : 'text-[#999999] hover:text-white hover:bg-[#222222]'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-2 truncate">
+                        <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24">
+                          <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                          <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                          <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"/>
+                          <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335"/>
+                        </svg>
+                        <span className="truncate">Google Fonts</span>
+                      </div>
+                      <span
+                        className={`text-[10px] font-mono ${
+                          isLight ? 'text-[#94a3b8]' : 'text-[#777777]'
+                        }`}
+                      >
+                        {counts.google}
+                      </span>
+                    </button>
+                  )}
+
+                  {/* Other enabled open source providers */}
+                  {AVAILABLE_PROVIDERS.filter((p) => p.id !== 'google' && enabledProviders.includes(p.id)).map((p) => {
+                    const filterKey = `provider-${p.id}`;
+                    const count = counts.byProvider?.[p.providerKey] || counts.byProvider?.[p.id] || 0;
+                    return (
+                      <button
+                        key={p.id}
+                        onClick={() => onSelectFilter(filterKey)}
+                        className={`w-full flex items-center justify-between px-2 py-1.5 rounded text-left transition-colors ${
+                          currentFilter === filterKey
+                            ? isLight
+                              ? 'bg-[#e2e8f0] text-[#0f172a] font-semibold'
+                              : 'bg-[#2b2b2b] text-white font-medium'
+                            : isLight
+                            ? 'text-[#475569] hover:text-[#0f172a] hover:bg-[#f1f5f9]'
+                            : 'text-[#999999] hover:text-white hover:bg-[#222222]'
+                        }`}
+                      >
+                        <div className="flex items-center space-x-2 truncate">
+                          <Globe className="w-3 h-3 text-[#888888] shrink-0" />
+                          <span className="truncate">{p.name}</span>
+                        </div>
+                        <span
+                          className={`text-[10px] font-mono ${
+                            isLight ? 'text-[#94a3b8]' : 'text-[#777777]'
+                          }`}
+                        >
+                          {count}
+                        </span>
+                      </button>
+                    );
+                  })}
+
                   <button
-                    onClick={() => onSelectFilter('featured')}
-                    className={`w-full flex items-center space-x-2 px-2 py-1.5 rounded text-left transition-colors ${
-                      currentFilter === 'featured'
+                    onClick={() => onSelectFilter('provider-local')}
+                    className={`w-full flex items-center justify-between px-2 py-1.5 rounded text-left transition-colors ${
+                      currentFilter === 'provider-local'
                         ? isLight
                           ? 'bg-[#e2e8f0] text-[#0f172a] font-semibold'
                           : 'bg-[#2b2b2b] text-white font-medium'
@@ -499,76 +606,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         : 'text-[#999999] hover:text-white hover:bg-[#222222]'
                     }`}
                   >
-                    <span>Featured Typefaces</span>
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* PROVIDERS Section */}
-            <div className={`pt-2 border-t ${isLight ? 'border-[#e2e8f0]' : 'border-[#242424]'}`}>
-              <button
-                onClick={() => setProvidersOpen(!providersOpen)}
-                className={`w-full flex items-center justify-between py-1 px-1 text-[11px] font-semibold uppercase tracking-wider ${
-                  isLight ? 'text-[#64748b] hover:text-[#0f172a]' : 'text-[#888888] hover:text-[#cccccc]'
-                }`}
-              >
-                <span className="flex items-center space-x-1">
-                  {providersOpen ? (
-                    <ChevronDown className="w-3 h-3" />
-                  ) : (
-                    <ChevronRight className="w-3 h-3" />
-                  )}
-                  <span>Providers</span>
-                </span>
-              </button>
-
-              {providersOpen && (
-                <div className="mt-1 space-y-0.5 pl-2">
-                  <button
-                    onClick={() => onSelectFilter('provider-google')}
-                    className={`w-full flex items-center justify-between px-2 py-1.5 rounded text-left transition-colors ${
-                      currentFilter === 'provider-google'
-                        ? isLight
-                          ? 'bg-[#e2e8f0] text-[#0f172a]'
-                          : 'bg-[#2b2b2b] text-white'
-                        : isLight
-                        ? 'text-[#475569] hover:text-[#0f172a] hover:bg-[#f1f5f9]'
-                        : 'text-[#999999] hover:text-white hover:bg-[#222222]'
-                    }`}
-                  >
                     <div className="flex items-center space-x-2 truncate">
-                      <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24">
-                        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"/>
-                        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335"/>
-                      </svg>
-                      <span className="truncate">Google Fonts</span>
-                    </div>
-                    <span
-                      className={`text-[10px] font-mono ${
-                        isLight ? 'text-[#94a3b8]' : 'text-[#777777]'
-                      }`}
-                    >
-                      {counts.google}
-                    </span>
-                  </button>
-
-                  <button
-                    onClick={() => onSelectFilter('provider-local')}
-                    className={`w-full flex items-center justify-between px-2 py-1.5 rounded text-left transition-colors ${
-                      currentFilter === 'provider-local'
-                        ? isLight
-                          ? 'bg-[#e2e8f0] text-[#0f172a]'
-                          : 'bg-[#2b2b2b] text-white'
-                        : isLight
-                        ? 'text-[#475569] hover:text-[#0f172a] hover:bg-[#f1f5f9]'
-                        : 'text-[#999999] hover:text-white hover:bg-[#222222]'
-                    }`}
-                  >
-                    <div className="flex items-center space-x-2 truncate">
-                      <HardDrive className="w-3 h-3 text-accent" />
+                      <HardDrive className="w-3 h-3 text-[#888888]" />
                       <span className="truncate">Local Fonts</span>
                     </div>
                     <span
@@ -585,15 +624,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     className={`w-full flex items-center justify-between px-2 py-1.5 rounded text-left transition-colors ${
                       currentFilter === 'provider-system'
                         ? isLight
-                          ? 'bg-[#e2e8f0] text-[#0f172a]'
-                          : 'bg-[#2b2b2b] text-white'
+                          ? 'bg-[#e2e8f0] text-[#0f172a] font-semibold'
+                          : 'bg-[#2b2b2b] text-white font-medium'
                         : isLight
                         ? 'text-[#475569] hover:text-[#0f172a] hover:bg-[#f1f5f9]'
                         : 'text-[#999999] hover:text-white hover:bg-[#222222]'
                     }`}
                   >
                     <div className="flex items-center space-x-2 truncate">
-                      <Monitor className="w-3 h-3 text-accent" />
+                      <Monitor className="w-3 h-3 text-[#888888]" />
                       <span className="truncate">System Fonts</span>
                     </div>
                     <span
@@ -672,7 +711,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   isLight ? 'bg-[#f1f5f9] border-[#cbd5e1]' : 'bg-[#202020] border-[#383838]'
                 }`}>
                   <div className="flex items-center justify-between">
-                    <span className="font-medium text-[11px] text-blue-400">
+                    <span className="font-medium text-[11px] text-accent">
                       {selectedFolderIds.size} selected
                     </span>
                     <button
@@ -787,7 +826,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   const hasChildren = children.length > 0;
                   const isCollapsed = collapsedFolderIds.has(folder.id);
                   const count = counts.byFolder[folder.id] || 0;
-                  const folderColor = folder.color || '#eab308'; // Default yellow folder color
+                  const folderColor = folder.color || '#888888'; // Default gray folder color
                   const isSystemFolder = ['pixel', 'serif', 'sans', 'display', 'mono', 'script'].includes(folder.id);
                   const isChecked = selectedFolderIds.has(folder.id);
 
@@ -830,7 +869,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           setContextMenu({ x: e.clientX, y: e.clientY, folder });
                         }}
                       >
-                        <div className="flex items-center space-x-1.5 truncate min-w-0 flex-1">
+                        <div
+                          className="flex items-center space-x-2 truncate min-w-0 flex-1"
+                          style={{ paddingLeft: depth > 0 ? `${depth * 12}px` : undefined }}
+                        >
                           {/* Bulk Selection Checkbox */}
                           {isSelectionMode && !isSystemFolder && (
                             <button
@@ -849,19 +891,31 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                   return next;
                                 });
                               }}
-                              className="shrink-0 text-[#3b82f6] p-0.5 hover:opacity-80"
+                              className="shrink-0 text-accent p-0.5 hover:opacity-80"
                               title={hasChildren ? 'Toggle this folder and all subfolders' : 'Toggle selection'}
                             >
                               {isChecked ? (
-                                <CheckSquare className="w-3.5 h-3.5 text-blue-500" />
+                                <CheckSquare className="w-3.5 h-3.5 text-accent" />
                               ) : (
                                 <Square className="w-3.5 h-3.5 text-neutral-500" />
                               )}
                             </button>
                           )}
 
+                          {/* Folder Icon - always at the leftmost position */}
+                          <FolderIcon
+                            className="w-3.5 h-3.5 shrink-0 transition-colors"
+                            style={{ color: folderColor }}
+                          />
 
-                          {/* Expand/Collapse Chevron for parents */}
+                          {/* Folder Name (full room with Scaler) */}
+                          <span className="truncate text-xs font-normal" title={folder.name}>
+                            {folder.name}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center shrink-0 ml-1.5">
+                          {/* Expand/Collapse Chevron on the far right */}
                           {hasChildren ? (
                             <button
                               type="button"
@@ -874,7 +928,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                   return next;
                                 });
                               }}
-                              className="shrink-0 p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10 text-neutral-400"
+                              className="p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10 text-neutral-400 hover:text-white transition-colors"
                               title={isCollapsed ? 'Expand subfolders' : 'Collapse subfolders'}
                             >
                               {isCollapsed ? (
@@ -883,111 +937,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                 <ChevronDown className="w-3 h-3" />
                               )}
                             </button>
-                          ) : depth > 0 ? (
-                            <span className="w-3 shrink-0" />
-                          ) : null}
-
-                          {/* Folder Icon */}
-                          <FolderIcon
-                            className="w-3.5 h-3.5 shrink-0 transition-colors"
-                            style={{ color: folderColor }}
-                          />
-
-                          {/* Folder Name (full room with Scaler) */}
-                          <span className="truncate text-xs" title={folder.name}>
-                            {folder.name}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center space-x-1 shrink-0 ml-1.5">
-                          <span
-                            className={`text-[10px] font-mono tabular-nums ${
-                              isLight ? 'text-[#94a3b8]' : 'text-[#777777]'
-                            }`}
-                          >
-                            {count}
-                          </span>
-
-                          {/* Color picker trigger */}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setActiveColorPickerFolderId(
-                                activeColorPickerFolderId === folder.id ? null : folder.id
-                              );
-                            }}
-                            className={`opacity-0 group-hover:opacity-100 transition-opacity p-0.5 ${
-                              isLight ? 'text-[#94a3b8] hover:text-[#0f172a]' : 'text-[#777777] hover:text-white'
-                            }`}
-                            title="Change folder color"
-                          >
-                            <span
-                              className="block w-2.5 h-2.5 rounded-full border border-black/20"
-                              style={{ backgroundColor: folderColor }}
-                            />
-                          </button>
-
-                          {/* Rescan folder action */}
-                          {onRescanFolder && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onRescanFolder(folder.id);
-                              }}
-                              className={`opacity-0 group-hover:opacity-100 transition-opacity p-0.5 ${
-                                isLight ? 'text-[#94a3b8] hover:text-[#2563eb]' : 'text-[#777777] hover:text-[#60a5fa]'
-                              }`}
-                              title="Rescan folder for new fonts"
-                            >
-                              <RefreshCw className="w-2.5 h-2.5" />
-                            </button>
-                          )}
-
-                          {/* Quick delete from Fontier (safe) */}
-                          {!isSystemFolder && !isSelectionMode && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onDeleteFolder(folder.id);
-                              }}
-                              className="opacity-0 group-hover:opacity-100 text-[#ef4444] transition-opacity p-0.5"
-                              title="Remove folder from Fontier (leaves files on PC untouched)"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
+                          ) : (
+                            <span className="w-4" />
                           )}
                         </div>
-
-                        {/* Floating Folder Color Picker Dropdown */}
-                        {activeColorPickerFolderId === folder.id && (
-                          <div
-                            ref={colorPickerRef}
-                            onClick={(e) => e.stopPropagation()}
-                            className={`absolute right-0 top-8 z-50 p-2 rounded-lg shadow-xl grid grid-cols-5 gap-1.5 w-36 animate-in fade-in zoom-in-95 border ${
-                              isLight
-                                ? 'bg-[#ffffff] border-[#cbd5e1]'
-                                : 'bg-[#1e1e1e] border-[#383838]'
-                            }`}
-                          >
-                            {FOLDER_COLORS.map((c) => (
-                              <button
-                                key={c}
-                                type="button"
-                                onClick={() => {
-                                  onChangeFolderColor?.(folder.id, c);
-                                  setActiveColorPickerFolderId(null);
-                                }}
-                                className={`w-5 h-5 rounded-full border border-black/20 transition-transform ${
-                                  folderColor === c
-                                    ? 'scale-115 ring-2 ring-blue-500'
-                                    : 'hover:scale-110'
-                                }`}
-                                style={{ backgroundColor: c }}
-                                title={`Set folder color: ${c}`}
-                              />
-                            ))}
-                          </div>
-                        )}
                       </div>
 
                       {/* Render child subfolders indented */}
@@ -1013,26 +966,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
           </div>
 
-          {/* Bottom "+ Add" and "Watch Local Folder" buttons */}
+          {/* Bottom "+ Add" button */}
           <div
-            className={`p-2.5 border-t space-y-1.5 ${
+            className={`p-2.5 border-t ${
               isLight ? 'border-[#e2e8f0] bg-[#f8fafc]' : 'border-[#262626] bg-[#161616]'
             }`}
           >
-            <button
-              id="watch-local-folder-btn"
-              onClick={onOpenLocalFolder}
-              className={`w-full flex items-center justify-center space-x-1.5 py-1.5 px-3 text-xs font-medium rounded border transition-colors ${
-                isLight
-                  ? 'bg-[#eff6ff] hover:bg-[#dbeafe] text-[#2563eb] border-[#bfdbfe]'
-                  : 'bg-[#1e2430] hover:bg-[#252f40] active:bg-[#1a202c] text-[#60a5fa] hover:text-[#93c5fd] border-[#2b3952]'
-              }`}
-              title="Select and live view a local font folder on your PC"
-            >
-              <HardDrive className="w-3.5 h-3.5" />
-              <span>Open Local Folder</span>
-            </button>
-
             <button
               id="add-fonts-btn"
               onClick={onOpenAddModal}
@@ -1129,9 +1068,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       setSelectedFolderIds((prev) => new Set([...Array.from(prev), ...allIds]));
                       setContextMenu(null);
                     }}
-                    className="w-full flex items-center px-3 py-1.5 space-x-2 text-left hover:bg-blue-600 hover:text-white transition-colors"
+                    className="w-full flex items-center px-3 py-1.5 space-x-2 text-left hover:bg-accent hover:text-white transition-colors"
                   >
-                    <CheckSquare className="w-3.5 h-3.5 text-blue-400" />
+                    <CheckSquare className="w-3.5 h-3.5 text-accent" />
                     <span>Select Folder & All Subfolders</span>
                   </button>
                 ) : (
@@ -1141,9 +1080,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       setSelectedFolderIds((prev) => new Set([...Array.from(prev), contextMenu.folder.id]));
                       setContextMenu(null);
                     }}
-                    className="w-full flex items-center px-3 py-1.5 space-x-2 text-left hover:bg-blue-600 hover:text-white transition-colors"
+                    className="w-full flex items-center px-3 py-1.5 space-x-2 text-left hover:bg-accent hover:text-white transition-colors"
                   >
-                    <CheckSquare className="w-3.5 h-3.5 text-blue-400" />
+                    <CheckSquare className="w-3.5 h-3.5 text-accent" />
                     <span>Select Folder</span>
                   </button>
                 )}
@@ -1156,7 +1095,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   onRescanFolder(contextMenu.folder.id);
                   setContextMenu(null);
                 }}
-                className="w-full flex items-center px-3 py-1.5 space-x-2 text-left hover:bg-blue-600 hover:text-white transition-colors"
+                className="w-full flex items-center px-3 py-1.5 space-x-2 text-left hover:bg-accent hover:text-white transition-colors"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
                 <span>Rescan Folder</span>
@@ -1169,7 +1108,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   onMoveFolderUp(contextMenu.folder.id);
                   setContextMenu(null);
                 }}
-                className="w-full flex items-center px-3 py-1.5 space-x-2 text-left hover:bg-blue-600 hover:text-white transition-colors"
+                className="w-full flex items-center px-3 py-1.5 space-x-2 text-left hover:bg-accent hover:text-white transition-colors"
               >
                 <ArrowUp className="w-3.5 h-3.5" />
                 <span>Move Up</span>
@@ -1182,23 +1121,39 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   onMoveFolderDown(contextMenu.folder.id);
                   setContextMenu(null);
                 }}
-                className="w-full flex items-center px-3 py-1.5 space-x-2 text-left hover:bg-blue-600 hover:text-white transition-colors"
+                className="w-full flex items-center px-3 py-1.5 space-x-2 text-left hover:bg-accent hover:text-white transition-colors"
               >
                 <ArrowDown className="w-3.5 h-3.5" />
                 <span>Move Down</span>
               </button>
             )}
 
-            <button
-              onClick={() => {
-                setActiveColorPickerFolderId(contextMenu.folder.id);
-                setContextMenu(null);
-              }}
-              className="w-full flex items-center px-3 py-1.5 space-x-2 text-left hover:bg-blue-600 hover:text-white transition-colors"
-            >
-              <Palette className="w-3.5 h-3.5" />
-              <span>Change Color</span>
-            </button>
+            {/* Folder Color Palette */}
+            <div className={`px-3 py-2 border-t ${isLight ? 'border-[#e2e8f0]' : 'border-neutral-700/50'}`}>
+              <div className="flex items-center space-x-1.5 text-[11px] mb-1.5 opacity-70">
+                <Palette className="w-3.5 h-3.5 text-accent" />
+                <span>Change Color</span>
+              </div>
+              <div className="grid grid-cols-5 gap-1.5 pt-0.5">
+                {FOLDER_COLORS.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => {
+                      if (onChangeFolderColor) {
+                        onChangeFolderColor(contextMenu.folder.id, c);
+                      }
+                      setContextMenu(null);
+                    }}
+                    className={`w-5 h-5 rounded-full border border-black/20 transition-transform hover:scale-115 flex items-center justify-center ${
+                      (contextMenu.folder.color || '#888888') === c ? 'ring-2 ring-accent scale-105' : 'opacity-85 hover:opacity-100'
+                    }`}
+                    style={{ backgroundColor: c }}
+                    title={c}
+                  />
+                ))}
+              </div>
+            </div>
 
             {!isSystemFolder && (
               <>
@@ -1217,11 +1172,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   title="Hides this folder from Fontier. Leaves all font files on your computer untouched."
                 >
                   <Trash2 className="w-3.5 h-3.5 text-neutral-400" />
-                  <span>
-                    {hasSubfolders
-                      ? `Remove Folder & Subfolders (${subfolderIds.length})`
-                      : 'Remove from Fontier'}
-                  </span>
+                  <span>Remove folder(s)</span>
                 </button>
 
                 <button
@@ -1236,14 +1187,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     });
                   }}
                   className="w-full flex items-center px-3 py-1.5 space-x-2 text-left text-[#ef4444] hover:bg-[#ef4444] hover:text-white transition-colors"
-                  title="Permanently moves this folder and its files to the Recycle Bin"
+                  title="Permanently moves this folder and its files to the Trash / Recycle Bin"
                 >
                   <AlertTriangle className="w-3.5 h-3.5" />
-                  <span>
-                    {hasSubfolders
-                      ? 'Delete from Device (Recycle Bin)...'
-                      : 'Delete from Device...'}
-                  </span>
+                  <span>Delete from device...</span>
                 </button>
               </>
             )}

@@ -100,12 +100,31 @@ export const FontRow: React.FC<FontRowProps> = React.memo(({
     return font.name;
   }, [previewText, font.name, font.supportedCodepoints]);
 
+  // Ensure high contrast in grid view on dark/light background cards
+  const gridTextColor = useMemo(() => {
+    if (!isLight) {
+      // In dark theme, card background is #1d1d1d. If textColor is black or dark, adapt to white
+      if (!textColor || textColor === '#000000' || textColor === '#000' || textColor === '#0f172a' || textColor === '#111827' || textColor === '#111111' || textColor === '#1e293b') {
+        return '#ffffff';
+      }
+    } else {
+      // In light theme, card background is #ffffff. If textColor is white or very light, adapt to dark
+      if (textColor === '#ffffff' || textColor === '#fff' || textColor === '#f8fafc' || textColor === '#f1f5f9' || textColor === '#e2e8f0') {
+        return '#0f172a';
+      }
+    }
+    return textColor;
+  }, [textColor, isLight]);
+
   if (viewMode === 'grid') {
     return (
       <div
         onClick={(e) => {
           e.stopPropagation();
           onSelectFont?.(font);
+        }}
+        onDoubleClick={(e) => {
+          e.stopPropagation();
           onOpenDetail(font);
         }}
         className={`relative aspect-square p-3 flex flex-col items-center justify-between rounded-lg border transition-all cursor-pointer group ${
@@ -113,18 +132,30 @@ export const FontRow: React.FC<FontRowProps> = React.memo(({
             ? 'bg-white hover:bg-gray-50 border-gray-200 hover:border-accent'
             : 'bg-[#1d1d1d] hover:bg-[#252525] border-[#2a2a2a] hover:border-accent'
         } ${isSelected ? 'ring-2 ring-accent' : ''}`}
-        title={font.name}
+        title={`${font.name} (Click to select, double-click to view glyphs)`}
       >
         {font.active && (
           <div className="absolute top-2.5 right-2.5 w-1.5 h-1.5 rounded-full bg-[#22c55e]" />
         )}
+
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenDetail(font);
+          }}
+          className="absolute top-2 left-2 p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-white/10 text-[#888888] hover:text-white transition-opacity"
+          title="Open glyphs and styles"
+        >
+          <ChevronRight className="w-3.5 h-3.5" />
+        </button>
         
         <div className="flex-1 flex items-center justify-center w-full overflow-hidden">
           <span
-            className="text-4xl select-none transition-transform group-hover:scale-105"
+            className="select-none transition-transform group-hover:scale-105"
             style={{
               fontFamily: isolatedFontFamily,
-              color: textColor,
+              color: gridTextColor,
+              fontSize: `${Math.max(22, Math.min(68, Math.round(fontSize * 0.9)))}px`,
               fontSynthesis: 'none',
             }}
           >
@@ -238,23 +269,22 @@ export const FontRow: React.FC<FontRowProps> = React.memo(({
 
         {/* Right side row controls */}
         <div className="flex items-center space-x-1.5">
-          {/* Properties Panel Toggle Button */}
+          {/* Properties Panel Toggle Button (Icon only) */}
           <button
             onClick={(e) => {
               e.stopPropagation();
               onSelectFont?.(font);
             }}
-            className={`p-1 rounded transition-colors text-xs flex items-center space-x-1 ${
+            className={`p-1 rounded transition-colors text-xs flex items-center justify-center ${
               isSelected
                 ? 'bg-accent-subtle text-accent'
                 : isLight
                 ? 'text-[#64748b] hover:text-[#0f172a] hover:bg-[#e2e8f0]'
                 : 'text-[#666666] hover:text-[#cccccc] hover:bg-[#252525]'
             }`}
-            title="Show Properties & Licensing Panel"
+            title="Show Properties & Specs Panel"
           >
             <Info className="w-3.5 h-3.5" />
-            <span className="text-[10px] hidden lg:inline">Properties</span>
           </button>
 
           {/* Favorite button with fully vibrant red */}

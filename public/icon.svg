@@ -1,48 +1,35 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" width="160" height="160">
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 160.62 160.62">
   <defs>
-    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#14161b" />
-      <stop offset="100%" stop-color="#0b0c0f" />
-    </linearGradient>
-    <linearGradient id="fgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#8c97a8" />
-      <stop offset="35%" stop-color="#ffffff" />
-      <stop offset="70%" stop-color="#cfd6e0" />
-      <stop offset="100%" stop-color="#9ba5b5" />
-    </linearGradient>
-    <linearGradient id="borderGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#2c303a" />
-      <stop offset="100%" stop-color="#161820" />
-    </linearGradient>
+    <style>
+      .cls-1 {
+        fill: url(#radial-gradient-2);
+        stroke: #ccc;
+        stroke-miterlimit: 10;
+        stroke-width: .16px;
+      }
+
+      .cls-2 {
+        fill: url(#radial-gradient);
+      }
+    </style>
+    <radialGradient id="radial-gradient" cx="80.31" cy="80.31" fx="80.31" fy="80.31" r="80.18" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#23232d"/>
+      <stop offset=".5" stop-color="#191920"/>
+      <stop offset="1" stop-color="#14141a"/>
+    </radialGradient>
+    <radialGradient id="radial-gradient-2" cx="81.42" cy="79.39" fx="158.26" fy="88.03" r="77.33" gradientTransform="translate(0 -81.06) scale(1 2.02)" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff"/>
+      <stop offset=".16" stop-color="#fbfbfc"/>
+      <stop offset=".3" stop-color="#f1f1f3"/>
+      <stop offset=".44" stop-color="#dfe1e4"/>
+      <stop offset=".56" stop-color="#c6c9cf"/>
+      <stop offset=".69" stop-color="#a6abb4"/>
+      <stop offset=".81" stop-color="#7e8593"/>
+      <stop offset=".92" stop-color="#505a6c"/>
+      <stop offset="1" stop-color="#2d394f"/>
+    </radialGradient>
   </defs>
-
-  <!-- Squircle Base with Border -->
-  <rect x="2" y="2" width="156" height="156" rx="36" fill="url(#bgGrad)" stroke="url(#borderGrad)" stroke-width="2.5" />
-
-  <!-- Stylized Fontier "F" Monogram -->
-  <g fill="url(#fgGrad)">
-    <!-- Top curved bar and stem -->
-    <path d="
-      M 140,36
-      L 140,50
-      L 62,50
-      C 44,50 36,60 36,78
-      L 36,122
-      L 22,122
-      L 22,76
-      C 22,48 38,36 64,36
-      Z
-    " />
-    
-    <!-- Middle aerodynamic bar with diagonal taper from stem -->
-    <path d="
-      M 140,72
-      L 140,86
-      L 66,86
-      C 54,86 42,92 36,101
-      L 36,83
-      C 44,75 54,72 66,72
-      Z
-    " />
-  </g>
+  <rect class="cls-2" x=".12" y=".12" width="160.37" height="160.37" rx="28" ry="28"/>
+  <path class="cls-1" d="M46.34,69.64c-1.41,3.08-2.11,6.33-2.11,9.75v15.98l18.49-10.55,15.17-8.84c2.28-1.27,4.72-1.91,7.34-1.91h44.12v10.75h-58.09c-2.68,0-5.16.64-7.44,1.91l-12.16,7.03c-3.95,2.35-6.33,5.7-7.14,10.05v10.75h-11.05v-35.17c0-6.36,1.57-12.24,4.72-17.64,3.15-5.39,7.42-9.66,12.81-12.81,5.39-3.15,11.27-4.72,17.64-4.72h60.7v10.75h-60.7c-4.89,0-9.36,1.36-13.42,4.07-4.05,2.71-7.02,6.25-8.89,10.6Z"/>
 </svg>

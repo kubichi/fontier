@@ -14,12 +14,35 @@ export type TextAlignment = 'left' | 'center' | 'right';
 
 export type ViewMode = 'list' | 'grid';
 
-export type DetailTab = 'styles' | 'glyphs' | 'waterfall' | 'details';
+export type DetailTab = 'styles' | 'glyphs' | 'waterfall' | 'details' | 'kern';
 
 export interface FontStyle {
   name: string;
   weight: number;
   style: 'normal' | 'italic';
+}
+
+export type FontProviderType =
+  | 'Google'
+  | 'Local'
+  | 'System'
+  | 'Fontshare'
+  | 'Open Foundry'
+  | 'Free Faces'
+  | 'UNCUT'
+  | 'Velvetyne'
+  | 'Collletttivo'
+  | string;
+
+export interface ProviderInfo {
+  id: string;
+  name: string;
+  providerKey: FontProviderType;
+  description: string;
+  url: string;
+  licenseNote: string;
+  badge?: string;
+  isBuiltin?: boolean;
 }
 
 export interface FontItem {
@@ -34,7 +57,7 @@ export interface FontItem {
   active: boolean;
   favorite: boolean;
   folderId?: string; // id of folder it belongs to
-  provider: 'Google' | 'Local' | 'System';
+  provider: FontProviderType;
   familyGroup?: string; // Base family name for grouping (e.g. 'Archivo', 'Apfel Grotezk')
   designer?: string;
   version?: string;

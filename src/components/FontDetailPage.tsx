@@ -10,6 +10,12 @@ import {
   Maximize2,
   ZoomIn,
   Globe,
+  Download,
+  RotateCcw,
+  Sliders,
+  Type,
+  Sparkles,
+  Palette,
 } from 'lucide-react';
 import opentype from 'opentype.js';
 import { FontItem, DetailTab, TextAlignment, FontStyle } from '../types';
@@ -54,10 +60,259 @@ export const FontDetailPage: React.FC<FontDetailPageProps> = ({
   const [copiedGlyph, setCopiedGlyph] = useState(false);
   const [glyphFilter, setGlyphFilter] = useState<string>('all');
   const [supportedCps, setSupportedCps] = useState<number[]>(font.supportedCodepoints || []);
+  const [copiedPath, setCopiedPath] = useState(false);
+
+  // Wordmark Studio State
+  const [kernWord, setKernWord] = useState<string>(font.name.toUpperCase());
+  const [kernOffsets, setKernOffsets] = useState<number[]>(() => new Array(font.name.length).fill(0));
+  const [selectedLetterIdx, setSelectedLetterIdx] = useState<number>(0);
+  const [shiftSelectedLetterIdx, setShiftSelectedLetterIdx] = useState<number | null>(null);
+  const [globalTracking, setGlobalTracking] = useState<number>(0);
+  const [kernFontSize, setKernFontSize] = useState<number>(72);
+  const [showGuides, setShowGuides] = useState<boolean>(true);
+  const [copiedSvg, setCopiedSvg] = useState<boolean>(false);
+
+  // Wordmark custom color states
+  const [wordmarkTextColor, setWordmarkTextColor] = useState<string>(textColor || '#ffffff');
+  const [wordmarkBgColor, setWordmarkBgColor] = useState<string>(bgColor || '#181818');
+  const [showColorPopover, setShowColorPopover] = useState<boolean>(false);
+
+  // Mouse Dragging State for letters
+  const [dragState, setDragState] = useState<{ index: number; startX: number; initialOffset: number } | null>(null);
+
+  // Update offsets length when word changes
+  const handleWordChange = (newWord: string) => {
+    setKernWord(newWord);
+    setKernOffsets((prev) => {
+      const next = new Array(newWord.length).fill(0);
+      for (let i = 0; i < Math.min(prev.length, newWord.length); i++) {
+        next[i] = prev[i];
+      }
+      return next;
+    });
+    if (selectedLetterIdx >= newWord.length) {
+      setSelectedLetterIdx(Math.max(0, newWord.length - 1));
+    }
+    setShiftSelectedLetterIdx(null);
+  };
+
+  const updateSelectedOffset = (delta: number) => {
+    setKernOffsets((prev) => {
+      const next = [...prev];
+      next[selectedLetterIdx] = (next[selectedLetterIdx] || 0) + delta;
+      return next;
+    });
+  };
+
+  const resetKerning = () => {
+    setKernOffsets(new Array(kernWord.length).fill(0));
+    setGlobalTracking(0);
+    setShiftSelectedLetterIdx(null);
+  };
+
+  // Keyboard arrow keys for kerning adjustment & navigation in Wordmark Studio
+  useEffect(() => {
+    if (activeTab !== 'wordmark') return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement;
+      if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT')) {
+        return;
+      }
+
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        const delta = e.shiftKey ? -5 : -1;
+        setKernOffsets((prev) => {
+          const next = [...prev];
+          next[selectedLetterIdx] = (next[selectedLetterIdx] || 0) + delta;
+          return next;
+        });
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        const delta = e.shiftKey ? 5 : 1;
+        setKernOffsets((prev) => {
+          const next = [...prev];
+          next[selectedLetterIdx] = (next[selectedLetterIdx] || 0) + delta;
+          return next;
+        });
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedLetterIdx((prev) => Math.max(0, prev - 1));
+        setShiftSelectedLetterIdx(null);
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedLetterIdx((prev) => Math.min(kernWord.length - 1, prev + 1));
+        setShiftSelectedLetterIdx(null);
+      } else if (e.key === 'Escape') {
+        setShiftSelectedLetterIdx(null);
+        setShowColorPopover(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [activeTab, selectedLetterIdx, kernWord.length]);
+
+  // Mouse drag handler for dragging letters horizontally
+  const handleLetterMouseDown = (index: number, e: React.MouseEvent) => {
+    if (e.shiftKey) {
+      // Shift-click selects range or pair
+      if (selectedLetterIdx !== index) {
+        setShiftSelectedLetterIdx(index);
+      } else {
+        setShiftSelectedLetterIdx(null);
+      }
+      return;
+    }
+
+    setSelectedLetterIdx(index);
+    setShiftSelectedLetterIdx(null);
+    setDragState({
+      index,
+      startX: e.clientX,
+      initialOffset: kernOffsets[index] || 0,
+    });
+  };
+
+  useEffect(() => {
+    if (!dragState) return;
+
+    const onMouseMove = (e: MouseEvent) => {
+      const delta = Math.round((e.clientX - dragState.startX) * 0.85);
+      setKernOffsets((prev) => {
+        const next = [...prev];
+        next[dragState.index] = dragState.initialOffset + delta;
+        return next;
+      });
+    };
+
+    const onMouseUp = () => {
+      setDragState(null);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+  }, [dragState]);
 
   const cleanFontFamily = useMemo(() => {
-    return font.fontFamily.split(',')[0].trim();
+    return font.fontFamily.split(',')[0].trim().replace(/['"]/g, '');
   }, [font.fontFamily]);
+
+  // Robust Path Copy
+  const copyPath = async (text: string) => {
+    if (!text) return;
+    try {
+      if (typeof window !== 'undefined' && (window as any).electronAPI?.copyToClipboard) {
+        await (window as any).electronAPI.copyToClipboard(text);
+      } else if (navigator.clipboard) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
+      setCopiedPath(true);
+      setTimeout(() => setCopiedPath(false), 2000);
+    } catch (e) {
+      console.warn('Clipboard copy error:', e);
+      try {
+        navigator.clipboard?.writeText(text);
+        setCopiedPath(true);
+        setTimeout(() => setCopiedPath(false), 2000);
+      } catch {}
+    }
+  };
+
+  // Generate completely valid, well-formed SVG without XML parsing errors, matching live canvas layout
+  const buildSvgString = () => {
+    const chars = Array.from(kernWord);
+    const trackingPx = Number(globalTracking) || 0;
+    const baseSize = Number(kernFontSize) || 72;
+    const safeFamily = cleanFontFamily || 'sans-serif';
+    const safeTextCol = wordmarkTextColor || textColor || '#ffffff';
+    const safeBgCol = wordmarkBgColor || bgColor || '#181818';
+
+    const escapeXml = (str: string) => {
+      return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
+    };
+
+    let tspans = '';
+    chars.forEach((c, idx) => {
+      const offset = (kernOffsets[idx] || 0) + (idx > 0 ? trackingPx : 0);
+      const textVal = c === ' ' ? '&#160;' : escapeXml(c);
+      if (idx === 0) {
+        tspans += `<tspan>${textVal}</tspan>`;
+      } else {
+        tspans += `<tspan dx="${offset}">${textVal}</tspan>`;
+      }
+    });
+
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 300" width="1000" height="300">
+  <rect width="1000" height="300" fill="${escapeXml(safeBgCol)}"/>
+  <text x="500" y="165" dominant-baseline="middle" text-anchor="middle" font-family="${escapeXml(safeFamily)}, sans-serif" font-size="${baseSize}" font-weight="${selectedStyle.weight}" font-style="${selectedStyle.style}" fill="${escapeXml(safeTextCol)}">${tspans}</text>
+</svg>`;
+  };
+
+  const handleExportSvg = () => {
+    const svgContent = buildSvgString();
+    const blob = new Blob([svgContent], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${(font.name || 'wordmark').toLowerCase().replace(/[^a-z0-9]/g, '-')}-wordmark.svg`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleCopySvg = async () => {
+    const svgContent = buildSvgString();
+    try {
+      if (typeof window !== 'undefined' && (window as any).electronAPI?.copyToClipboard) {
+        await (window as any).electronAPI.copyToClipboard(svgContent);
+      } else if (navigator.clipboard) {
+        await navigator.clipboard.writeText(svgContent);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = svgContent;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
+      setCopiedSvg(true);
+      setTimeout(() => setCopiedSvg(false), 2000);
+    } catch {
+      try {
+        navigator.clipboard?.writeText(svgContent);
+        setCopiedSvg(true);
+        setTimeout(() => setCopiedSvg(false), 2000);
+      } catch {}
+    }
+  };
+
+  const showLicensing = font.provider !== 'Local' && font.provider !== 'System' && (Boolean(font.license) || Boolean(font.licenseUrl));
 
   // Ensure font is loaded into Chromium font engine so glyphs and pangrams render correctly
   useEffect(() => {
@@ -419,6 +674,19 @@ export const FontDetailPage: React.FC<FontDetailPageProps> = ({
         </button>
 
         <button
+          onClick={() => setActiveTab('kern')}
+          className={`py-2.5 font-medium border-b-2 transition-colors flex items-center space-x-1.5 ${
+            activeTab === 'kern'
+              ? 'border-accent text-accent'
+              : isLight
+              ? 'border-transparent text-[#64748b] hover:text-[#0f172a]'
+              : 'border-transparent text-[#888888] hover:text-[#cccccc]'
+          }`}
+        >
+          <span>Wordmark</span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('details')}
           className={`py-2.5 font-medium border-b-2 transition-colors flex items-center space-x-1.5 ${
             activeTab === 'details'
@@ -428,7 +696,7 @@ export const FontDetailPage: React.FC<FontDetailPageProps> = ({
               : 'border-transparent text-[#888888] hover:text-[#cccccc]'
           }`}
         >
-          <span>Details & License</span>
+          <span>{showLicensing ? 'Details & License' : 'Font Details'}</span>
         </button>
       </div>
 
@@ -465,23 +733,6 @@ export const FontDetailPage: React.FC<FontDetailPageProps> = ({
                     <span className="text-xl font-bold text-white tracking-wide">
                       Character: &apos;{selectedGlyph}&apos;
                     </span>
-                    <button
-                      onClick={() => copyCharacter(selectedGlyph)}
-                      className="px-2 py-1 bg-[#2b2b2b] hover:bg-[#383838] text-xs text-[#cccccc] hover:text-white rounded border border-[#444] transition-colors flex items-center space-x-1"
-                      title="Copy character"
-                    >
-                      {copiedGlyph ? (
-                        <>
-                          <CheckCheck className="w-3 h-3 text-[#22c55e]" />
-                          <span className="text-[#22c55e] text-[11px]">Copied!</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-3 h-3" />
-                          <span className="text-[11px]">Copy</span>
-                        </>
-                      )}
-                    </button>
                   </div>
                   <div className="flex items-center space-x-4 text-xs font-mono text-[#888888]">
                     <span>Unicode: <strong className="text-accent">{getUnicodeHex(selectedGlyph)}</strong></span>
@@ -1034,11 +1285,587 @@ export const FontDetailPage: React.FC<FontDetailPageProps> = ({
           </div>
         )}
 
+        {/* ==================== WORDMARK STUDIO TAB ==================== */}
+        {activeTab === 'kern' && (
+          <div className="space-y-6 max-w-5xl mx-auto">
+            {/* Top Toolbar / Wordmark Settings */}
+            <div className={`p-4 rounded-xl border space-y-4 shadow-sm ${
+              isLight ? 'bg-white border-[#e2e8f0]' : 'bg-[#1e1e1e] border-[#2c2c2c]'
+            }`}>
+              {/* Row 1: Text input, Case, Presets */}
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                {/* Word Input */}
+                <div className="flex-1 w-full md:w-auto">
+                  <label className={`text-[11px] font-semibold uppercase tracking-wider block mb-1.5 ${
+                    isLight ? 'text-[#64748b]' : 'text-[#888888]'
+                  }`}>
+                    Wordmark Text
+                  </label>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="text"
+                      value={kernWord}
+                      onChange={(e) => handleWordChange(e.target.value)}
+                      placeholder="Type your wordmark..."
+                      className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium border focus:outline-none focus:border-accent ${
+                        isLight
+                          ? 'bg-[#f8fafc] text-[#0f172a] border-[#cbd5e1]'
+                          : 'bg-[#161616] text-white border-[#333333]'
+                      }`}
+                    />
+                    {/* Case converters */}
+                    <button
+                      type="button"
+                      onClick={() => handleWordChange(kernWord.toUpperCase())}
+                      className={`px-2.5 py-2 rounded-lg text-xs font-semibold border transition-colors ${
+                        isLight
+                          ? 'bg-[#f8fafc] hover:bg-[#f1f5f9] text-[#334155] border-[#cbd5e1]'
+                          : 'bg-[#252525] hover:bg-[#303030] text-[#cccccc] border-[#383838]'
+                      }`}
+                      title="Convert to UPPERCASE"
+                    >
+                      AA
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleWordChange(kernWord.toLowerCase())}
+                      className={`px-2.5 py-2 rounded-lg text-xs font-semibold border transition-colors ${
+                        isLight
+                          ? 'bg-[#f8fafc] hover:bg-[#f1f5f9] text-[#334155] border-[#cbd5e1]'
+                          : 'bg-[#252525] hover:bg-[#303030] text-[#cccccc] border-[#383838]'
+                      }`}
+                      title="Convert to lowercase"
+                    >
+                      aa
+                    </button>
+                  </div>
+                </div>
+
+                {/* Preset Words */}
+                <div className="w-full md:w-auto">
+                  <span className={`text-[11px] font-semibold uppercase tracking-wider block mb-1.5 ${
+                    isLight ? 'text-[#64748b]' : 'text-[#888888]'
+                  }`}>
+                    Presets
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {['FONTIER', 'AVALANCHE', 'TYPO', 'WARP', 'To', 'Wa', 'LT', 'VAV'].map((p) => (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => handleWordChange(p)}
+                        className={`px-2 py-1 rounded text-xs font-mono border transition-colors ${
+                          kernWord === p
+                            ? 'bg-accent text-white border-accent'
+                            : isLight
+                            ? 'bg-[#f8fafc] hover:bg-[#f1f5f9] text-[#64748b] border-[#cbd5e1]'
+                            : 'bg-[#252525] hover:bg-[#303030] text-[#aaaaaa] border-[#333333]'
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Row 2: Sliders, Weight, Guides, Colors Popover, and Reset */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 pt-3 border-t border-[#2a2a2a]/30">
+                {/* Font Size */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className={isLight ? 'text-[#64748b]' : 'text-[#888888]'}>Size</span>
+                    <span className="font-mono text-accent font-semibold">{kernFontSize}px</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="24"
+                    max="140"
+                    value={kernFontSize}
+                    onChange={(e) => setKernFontSize(Number(e.target.value))}
+                    className="w-full h-1.5 bg-[#333333] rounded-lg appearance-none cursor-pointer accent-accent"
+                  />
+                </div>
+
+                {/* Global Tracking */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className={isLight ? 'text-[#64748b]' : 'text-[#888888]'}>Tracking</span>
+                    <span className="font-mono text-accent font-semibold">{globalTracking > 0 ? `+${globalTracking}` : globalTracking}px</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="-20"
+                    max="80"
+                    value={globalTracking}
+                    onChange={(e) => setGlobalTracking(Number(e.target.value))}
+                    className="w-full h-1.5 bg-[#333333] rounded-lg appearance-none cursor-pointer accent-accent"
+                  />
+                </div>
+
+                {/* Weight / Style Variant */}
+                <div className="space-y-1">
+                  <span className={`text-xs block ${isLight ? 'text-[#64748b]' : 'text-[#888888]'}`}>Weight / Style</span>
+                  <select
+                    value={selectedStyle.name}
+                    onChange={(e) => {
+                      const s = font.styles.find((st) => st.name === e.target.value);
+                      if (s) setSelectedStyle(s);
+                    }}
+                    className={`w-full text-xs font-medium py-1 px-2 rounded border focus:outline-none ${
+                      isLight
+                        ? 'bg-[#f8fafc] text-[#0f172a] border-[#cbd5e1]'
+                        : 'bg-[#181818] text-white border-[#333333]'
+                    }`}
+                  >
+                    {font.styles.map((s) => (
+                      <option key={s.name} value={s.name} className={isLight ? 'bg-white text-black' : 'bg-[#222222] text-white'}>
+                        {s.name} ({s.weight})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Compact Toolbar Action Controls (Guides, Colors Popover, Reset) */}
+                <div className="flex items-end space-x-1.5 relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowGuides((prev) => !prev)}
+                    className={`px-2.5 py-1.5 rounded text-xs font-medium border transition-colors text-center ${
+                      showGuides
+                        ? 'bg-accent-subtle border-accent text-accent'
+                        : isLight
+                        ? 'bg-[#f8fafc] border-[#cbd5e1] text-[#64748b]'
+                        : 'bg-[#222222] border-[#333333] text-[#888888]'
+                    }`}
+                    title="Toggle typographic alignment guides"
+                  >
+                    {showGuides ? 'Guides: On' : 'Guides: Off'}
+                  </button>
+
+                  {/* Minimized Colors Button + Dropdown Popover */}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowColorPopover((prev) => !prev)}
+                      className={`px-2.5 py-1.5 rounded text-xs font-medium border transition-colors flex items-center space-x-1.5 ${
+                        showColorPopover
+                          ? 'bg-accent-subtle border-accent text-accent'
+                          : isLight
+                          ? 'bg-[#f8fafc] hover:bg-[#f1f5f9] text-[#334155] border-[#cbd5e1]'
+                          : 'bg-[#222222] hover:bg-[#2a2a2a] text-[#cccccc] border-[#333333]'
+                      }`}
+                      title="Customize text and canvas colors"
+                    >
+                      <Palette className="w-3.5 h-3.5 text-accent" />
+                      <span>Colors</span>
+                      <div
+                        className="w-2.5 h-2.5 rounded-full border border-white/20"
+                        style={{ backgroundColor: wordmarkTextColor }}
+                      />
+                    </button>
+
+                    {showColorPopover && (
+                      <div className={`absolute right-0 top-full mt-2 z-50 p-3.5 rounded-xl shadow-2xl border w-72 space-y-3 animate-in fade-in zoom-in-95 duration-100 ${
+                        isLight ? 'bg-white border-[#cbd5e1] text-[#1e293b]' : 'bg-[#1e1e1e] border-[#383838] text-[#e0e0e0]'
+                      }`}>
+                        {/* Text Color Selection */}
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="font-semibold uppercase tracking-wider text-neutral-400">Text Color</span>
+                            <span className="font-mono text-[10px] text-accent">{wordmarkTextColor}</span>
+                          </div>
+                          <div className="flex items-center space-x-1.5">
+                            {['#ffffff', '#38bdf8', '#22c55e', '#f59e0b', '#f43f5e', '#a855f7', '#000000'].map((c) => (
+                              <button
+                                key={`pop-txt-${c}`}
+                                type="button"
+                                onClick={() => setWordmarkTextColor(c)}
+                                className={`w-5 h-5 rounded-full border transition-transform ${
+                                  wordmarkTextColor.toLowerCase() === c.toLowerCase()
+                                    ? 'ring-2 ring-accent scale-110'
+                                    : 'opacity-80 hover:opacity-100 hover:scale-105 border-white/20'
+                                }`}
+                                style={{ backgroundColor: c }}
+                              />
+                            ))}
+                            <label className={`relative cursor-pointer px-1.5 py-0.5 rounded border text-[10px] font-medium flex items-center space-x-0.5 ${
+                              isLight ? 'bg-[#f8fafc] border-[#cbd5e1]' : 'bg-[#282828] border-[#3e3e3e]'
+                            }`}>
+                              <Palette className="w-2.5 h-2.5 text-accent" />
+                              <input
+                                type="color"
+                                value={wordmarkTextColor}
+                                onChange={(e) => setWordmarkTextColor(e.target.value)}
+                                className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                              />
+                            </label>
+                          </div>
+                        </div>
+
+                        {/* Background Color Selection */}
+                        <div className="space-y-1.5 pt-2 border-t border-[#333333]/40">
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="font-semibold uppercase tracking-wider text-neutral-400">Canvas Background</span>
+                            <span className="font-mono text-[10px] text-accent">{wordmarkBgColor}</span>
+                          </div>
+                          <div className="flex items-center space-x-1.5">
+                            {['#181818', '#0d1117', '#000000', '#ffffff', '#f8fafc', '#1e293b'].map((c) => (
+                              <button
+                                key={`pop-bg-${c}`}
+                                type="button"
+                                onClick={() => setWordmarkBgColor(c)}
+                                className={`w-5 h-5 rounded-full border transition-transform ${
+                                  wordmarkBgColor.toLowerCase() === c.toLowerCase()
+                                    ? 'ring-2 ring-accent scale-110'
+                                    : 'opacity-80 hover:opacity-100 hover:scale-105 border-white/20'
+                                }`}
+                                style={{ backgroundColor: c }}
+                              />
+                            ))}
+                            <label className={`relative cursor-pointer px-1.5 py-0.5 rounded border text-[10px] font-medium flex items-center space-x-0.5 ${
+                              isLight ? 'bg-[#f8fafc] border-[#cbd5e1]' : 'bg-[#282828] border-[#3e3e3e]'
+                            }`}>
+                              <Palette className="w-2.5 h-2.5 text-accent" />
+                              <input
+                                type="color"
+                                value={wordmarkBgColor}
+                                onChange={(e) => setWordmarkBgColor(e.target.value)}
+                                className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                              />
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={resetKerning}
+                    className={`p-2 rounded text-xs font-medium border transition-colors flex items-center justify-center ${
+                      isLight
+                        ? 'bg-[#f8fafc] hover:bg-[#f1f5f9] text-[#64748b] border-[#cbd5e1]'
+                        : 'bg-[#222222] hover:bg-[#2a2a2a] text-[#aaaaaa] border-[#333333]'
+                    }`}
+                    title="Reset all kerning and tracking offsets"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Shift Distance Indicator: when two letters are selected */}
+            {shiftSelectedLetterIdx !== null && selectedLetterIdx !== null && shiftSelectedLetterIdx !== selectedLetterIdx && (
+              <div className="p-3 bg-accent/10 border border-accent/40 rounded-xl flex items-center justify-between text-xs animate-in fade-in duration-150">
+                <div className="flex items-center space-x-2">
+                  <span className="font-semibold text-white">
+                    Distance between &apos;{kernWord[Math.min(selectedLetterIdx, shiftSelectedLetterIdx)]}&apos; (#{Math.min(selectedLetterIdx, shiftSelectedLetterIdx) + 1}) and &apos;{kernWord[Math.max(selectedLetterIdx, shiftSelectedLetterIdx)]}&apos; (#{Math.max(selectedLetterIdx, shiftSelectedLetterIdx) + 1}):
+                  </span>
+                  <span className="font-mono text-accent font-bold">
+                    {(() => {
+                      const min = Math.min(selectedLetterIdx, shiftSelectedLetterIdx);
+                      const max = Math.max(selectedLetterIdx, shiftSelectedLetterIdx);
+                      let totalSpacing = 0;
+                      for (let i = min + 1; i <= max; i++) {
+                        totalSpacing += globalTracking + (kernOffsets[i] || 0);
+                      }
+                      return `${totalSpacing}px (across ${max - min} interval${max - min === 1 ? '' : 's'})`;
+                    })()}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShiftSelectedLetterIdx(null)}
+                  className="text-[11px] underline text-neutral-400 hover:text-white"
+                >
+                  Clear Selection
+                </button>
+              </div>
+            )}
+
+            {/* Interactive Kerning Canvas with Dragging and Spacing Lines */}
+            <div
+              style={{ backgroundColor: wordmarkBgColor }}
+              className={`relative min-h-[280px] rounded-2xl border p-8 flex flex-col items-center justify-center overflow-x-auto shadow-inner select-none transition-colors ${
+                dragState ? 'cursor-ew-resize' : 'cursor-default'
+              } ${isLight ? 'border-[#e2e8f0]' : 'border-[#333333]'}`}
+            >
+              {/* Optional Typographic Guidelines */}
+              {showGuides && (
+                <div className="absolute inset-0 pointer-events-none flex flex-col justify-center opacity-30">
+                  <div className="w-full border-b border-dashed border-accent/60 mb-8" />
+                  <div className="w-full border-b border-dashed border-accent/60 mt-8" />
+                </div>
+              )}
+
+              {/* Shift Selected Span Dashed Line with Distance Badge */}
+              {shiftSelectedLetterIdx !== null && selectedLetterIdx !== null && shiftSelectedLetterIdx !== selectedLetterIdx && (
+                <div className="w-full max-w-lg flex items-center justify-center space-x-2 mb-4 animate-in fade-in duration-150 z-20 pointer-events-none">
+                  <div className="flex-1 border-b-2 border-dashed border-accent opacity-80" />
+                  <span className="px-3 py-1 rounded-full bg-accent text-white font-mono text-xs font-bold shadow-md whitespace-nowrap">
+                    {(() => {
+                      const min = Math.min(selectedLetterIdx, shiftSelectedLetterIdx);
+                      const max = Math.max(selectedLetterIdx, shiftSelectedLetterIdx);
+                      let totalSpacing = 0;
+                      for (let i = min + 1; i <= max; i++) {
+                        totalSpacing += globalTracking + (kernOffsets[i] || 0);
+                      }
+                      return `- - - ${totalSpacing}px (${kernWord[min]} ↔ ${kernWord[max]}) - - -`;
+                    })()}
+                  </span>
+                  <div className="flex-1 border-b-2 border-dashed border-accent opacity-80" />
+                </div>
+              )}
+
+              {/* Characters container with interactive kerning handles & selective dimension markers */}
+              <div className="flex items-center justify-center relative z-10 py-6 px-4" style={{ overflow: 'visible' }}>
+                {Array.from(kernWord).map((char, index) => {
+                  const offset = kernOffsets[index] || 0;
+                  const isSelected = selectedLetterIdx === index;
+                  const isShiftSelected = shiftSelectedLetterIdx === index;
+                  const isWithinSpan =
+                    shiftSelectedLetterIdx !== null &&
+                    index >= Math.min(selectedLetterIdx, shiftSelectedLetterIdx) &&
+                    index <= Math.max(selectedLetterIdx, shiftSelectedLetterIdx);
+
+                  const isDraggingThis = dragState?.index === index;
+                  const spacingPx = index > 0 ? globalTracking + offset : 0;
+                  const showLeftDistance = selectedLetterIdx !== null && selectedLetterIdx === index && index > 0 && shiftSelectedLetterIdx === null;
+                  const showRightDistance = selectedLetterIdx !== null && selectedLetterIdx === index - 1 && index > 0 && shiftSelectedLetterIdx === null;
+
+                  return (
+                    <div
+                      key={`kern-item-${index}-${char}`}
+                      className="relative flex flex-col items-center group cursor-grab active:cursor-grabbing select-none"
+                      style={{
+                        marginLeft: index > 0 ? `${spacingPx}px` : 0,
+                        zIndex: isDraggingThis ? 40 : isSelected ? 30 : 10,
+                      }}
+                      onMouseDown={(e) => handleLetterMouseDown(index, e)}
+                    >
+                      {/* Selective Distance Indicator Badge (ONLY shown for adjacent neighbor of selected letter) */}
+                      {(showLeftDistance || showRightDistance) && (
+                        <div className="absolute -top-7 left-0 transform -translate-x-1/2 pointer-events-none z-50 animate-in fade-in zoom-in-95 duration-100">
+                          <div className="bg-accent text-white font-mono text-[9px] px-1.5 py-0.5 rounded shadow-lg flex items-center space-x-1 whitespace-nowrap">
+                            <span>{kernWord[index - 1]} ↔ {char}:</span>
+                            <span className="font-bold">{spacingPx > 0 ? `+${spacingPx}` : spacingPx}px</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Character Offset Pill / Drag Handle above */}
+                      <div
+                        className={`text-[9px] font-mono px-1.5 py-0.5 rounded mb-1 transition-all pointer-events-none ${
+                          isDraggingThis
+                            ? 'bg-accent text-white scale-110 shadow-md font-bold'
+                            : isSelected || isShiftSelected
+                            ? 'bg-accent text-white shadow-xs font-semibold'
+                            : isWithinSpan
+                            ? 'bg-accent/40 text-white'
+                            : offset !== 0
+                            ? 'bg-accent/20 text-accent'
+                            : 'opacity-0 group-hover:opacity-80 bg-[#333333] text-[#aaaaaa]'
+                        }`}
+                      >
+                        {isDraggingThis ? `${offset > 0 ? `+${offset}` : offset}px` : (offset > 0 ? `+${offset}` : offset !== 0 ? `${offset}` : `${index + 1}`)}
+                      </div>
+
+                      {/* Letter Glyph Box */}
+                      <div
+                        className={`px-1 py-0.5 rounded-lg transition-all ${
+                          isDraggingThis
+                            ? 'ring-2 ring-accent bg-accent/25 shadow-lg'
+                            : isSelected || isShiftSelected
+                            ? 'ring-2 ring-accent bg-accent/15'
+                            : isWithinSpan
+                            ? 'ring-1 ring-accent/60 bg-accent/10'
+                            : 'hover:bg-white/5'
+                        }`}
+                      >
+                        <span
+                          style={{
+                            fontFamily: cleanFontFamily,
+                            color: wordmarkTextColor,
+                            fontWeight: selectedStyle.weight,
+                            fontStyle: selectedStyle.style,
+                            fontSize: `${kernFontSize}px`,
+                            lineHeight: 1,
+                            display: 'inline-block',
+                          }}
+                        >
+                          {char === ' ' ? '\u00A0' : char}
+                        </span>
+                      </div>
+
+                      {/* Sub-index indicator */}
+                      <span className={`text-[8px] font-mono mt-1 transition-opacity ${
+                        isSelected || isShiftSelected || isWithinSpan ? 'text-accent font-bold opacity-100' : 'text-[#666666] opacity-30'
+                      }`}>
+                        #{index + 1}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Selected Letter Kerning Fine-Tuner */}
+            {kernWord.length > 0 && (
+              <div className={`p-4 rounded-xl border flex flex-col md:flex-row items-center justify-between gap-4 shadow-sm ${
+                isLight ? 'bg-white border-[#e2e8f0]' : 'bg-[#1e1e1e] border-[#2c2c2c]'
+              }`}>
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 rounded-lg bg-accent/10 border border-accent flex items-center justify-center shrink-0">
+                    <span
+                      style={{
+                        fontFamily: cleanFontFamily,
+                        color: wordmarkTextColor,
+                        fontWeight: selectedStyle.weight,
+                        fontStyle: selectedStyle.style,
+                        fontSize: '22px',
+                        lineHeight: 1,
+                      }}
+                    >
+                      {kernWord[selectedLetterIdx] || 'A'}
+                    </span>
+                  </div>
+                  <div>
+                    <div className="flex items-center space-x-2">
+                      <span className={`font-semibold text-xs ${isLight ? 'text-[#0f172a]' : 'text-white'}`}>
+                        Letter &apos;{kernWord[selectedLetterIdx]}&apos; (Position #{selectedLetterIdx + 1})
+                      </span>
+                      <span className="text-[11px] font-mono text-accent font-bold">
+                        {(kernOffsets[selectedLetterIdx] || 0) > 0 ? `+${kernOffsets[selectedLetterIdx]}` : (kernOffsets[selectedLetterIdx] || 0)}px
+                      </span>
+                    </div>
+                    <span className={`text-[10px] ${isLight ? 'text-[#64748b]' : 'text-[#888888]'}`}>
+                      Drag letter on canvas or use the position slider and numeric input below
+                    </span>
+                  </div>
+                </div>
+
+                {/* Slider + Number Input Controls */}
+                <div className="flex items-center space-x-3 w-full md:w-auto justify-end">
+                  <div className="flex items-center space-x-2 flex-1 md:flex-none">
+                    <span className={`text-[11px] ${isLight ? 'text-[#64748b]' : 'text-[#888888]'}`}>Offset:</span>
+                    <input
+                      type="range"
+                      min="-120"
+                      max="120"
+                      value={kernOffsets[selectedLetterIdx] || 0}
+                      onChange={(e) => {
+                        const val = Number(e.target.value);
+                        setKernOffsets((prev) => {
+                          const next = [...prev];
+                          next[selectedLetterIdx] = val;
+                          return next;
+                        });
+                      }}
+                      className="w-32 sm:w-44 h-1.5 bg-[#333333] rounded-lg appearance-none cursor-pointer accent-accent"
+                    />
+                    <div className="flex items-center space-x-1">
+                      <input
+                        type="number"
+                        min="-300"
+                        max="300"
+                        value={kernOffsets[selectedLetterIdx] || 0}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value, 10) || 0;
+                          setKernOffsets((prev) => {
+                            const next = [...prev];
+                            next[selectedLetterIdx] = val;
+                            return next;
+                          });
+                        }}
+                        className={`w-14 px-1.5 py-1 rounded text-xs font-mono text-center font-semibold border focus:outline-none focus:border-accent ${
+                          isLight
+                            ? 'bg-[#f8fafc] text-[#0f172a] border-[#cbd5e1]'
+                            : 'bg-[#181818] text-white border-[#383838]'
+                        }`}
+                      />
+                      <span className={`text-[10px] font-mono ${isLight ? 'text-[#64748b]' : 'text-[#888888]'}`}>px</span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setKernOffsets((prev) => {
+                        const next = [...prev];
+                        next[selectedLetterIdx] = 0;
+                        return next;
+                      });
+                    }}
+                    className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${
+                      isLight
+                        ? 'bg-[#f8fafc] hover:bg-[#f1f5f9] text-[#64748b] border-[#cbd5e1]'
+                        : 'bg-[#252525] hover:bg-[#303030] text-[#aaaaaa] border-[#383838]'
+                    }`}
+                    title="Reset offset for this letter to 0"
+                  >
+                    Reset
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Export Bar */}
+            <div className={`p-4 rounded-xl border flex flex-col sm:flex-row items-center justify-between gap-3 ${
+              isLight ? 'bg-white border-[#e2e8f0]' : 'bg-[#181818] border-[#2c2c2c]'
+            }`}>
+              <div className="flex items-center space-x-2">
+                <span className={`text-xs font-semibold ${isLight ? 'text-[#0f172a]' : 'text-white'}`}>
+                  Export Wordmark
+                </span>
+              </div>
+
+              <div className="flex items-center space-x-2 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={handleCopySvg}
+                  className="flex-1 sm:flex-none px-3.5 py-1.5 rounded-lg text-xs font-medium bg-accent hover:bg-accent/90 text-white transition-colors flex items-center justify-center space-x-1.5 shadow-sm"
+                >
+                  {copiedSvg ? (
+                    <>
+                      <Check className="w-3.5 h-3.5" />
+                      <span>SVG Copied!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>Copy SVG</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleExportSvg}
+                  className={`flex-1 sm:flex-none px-3.5 py-1.5 rounded-lg text-xs font-medium border transition-colors flex items-center justify-center space-x-1.5 ${
+                    isLight
+                      ? 'bg-white hover:bg-[#f8fafc] text-[#0f172a] border-[#cbd5e1]'
+                      : 'bg-[#222222] hover:bg-[#2b2b2b] text-white border-[#383838]'
+                  }`}
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Download SVG</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* ==================== DETAILS & LICENSE TAB ==================== */}
         {activeTab === 'details' && (
           <div className="max-w-3xl space-y-6 pb-12">
-            <div className="bg-[#1e1e1e] rounded-lg border border-[#2d2d2d] p-5 space-y-4">
-              <h2 className="text-sm font-semibold text-white flex items-center justify-between">
+            <div className={`rounded-lg border p-5 space-y-4 ${
+              isLight ? 'bg-white border-[#e2e8f0]' : 'bg-[#1e1e1e] border-[#2d2d2d]'
+            }`}>
+              <h2 className={`text-sm font-semibold flex items-center justify-between ${
+                isLight ? 'text-[#0f172a]' : 'text-white'
+              }`}>
                 <span>Font Specifications</span>
                 <span className="text-[11px] font-mono px-2 py-0.5 bg-[#252525] border border-[#383838] text-accent rounded">
                   .{font.format}
@@ -1047,21 +1874,21 @@ export const FontDetailPage: React.FC<FontDetailPageProps> = ({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 text-xs">
                 <div>
-                  <span className="text-[#888888] block text-[11px]">Font Family</span>
-                  <span className="font-medium text-white">{font.name}</span>
+                  <span className={`block text-[11px] ${isLight ? 'text-[#64748b]' : 'text-[#888888]'}`}>Font Family</span>
+                  <span className={`font-medium ${isLight ? 'text-[#0f172a]' : 'text-white'}`}>{font.name}</span>
                 </div>
                 <div>
-                  <span className="text-[#888888] block text-[11px]">Designer / Foundry</span>
-                  <span className="font-medium text-white">{font.designer || 'Independent / Google'}</span>
+                  <span className={`block text-[11px] ${isLight ? 'text-[#64748b]' : 'text-[#888888]'}`}>Designer / Foundry</span>
+                  <span className={`font-medium ${isLight ? 'text-[#0f172a]' : 'text-white'}`}>{font.designer || 'Independent / Google'}</span>
                 </div>
                 <div>
-                  <span className="text-[#888888] block text-[11px]">PostScript Name</span>
+                  <span className={`block text-[11px] ${isLight ? 'text-[#64748b]' : 'text-[#888888]'}`}>PostScript Name</span>
                   <span className="font-mono text-[#cccccc]">{font.postScriptName || `${font.name.replace(/\s+/g, '')}-Regular`}</span>
                 </div>
                 <div className="col-span-1 md:col-span-2">
                   <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-[#888888] block text-[11px]">FILTER TAG</span>
-                    <span className="text-xs px-2 py-0.5 rounded font-medium bg-[#252525] text-accent">
+                    <span className={`block text-[11px] ${isLight ? 'text-[#64748b]' : 'text-[#888888]'}`}>CATEGORY TAG</span>
+                    <span className="text-xs px-2 py-0.5 rounded font-medium bg-accent-subtle text-accent">
                       {font.category || 'Untagged'}
                     </span>
                   </div>
@@ -1090,6 +1917,8 @@ export const FontDetailPage: React.FC<FontDetailPageProps> = ({
                           className={`px-2 py-0.5 rounded text-[11px] font-medium border transition-colors ${
                             isSelected
                               ? 'border-accent bg-accent text-white font-semibold shadow-xs'
+                              : isLight
+                              ? 'border-[#e2e8f0] bg-[#f8fafc] text-[#64748b] hover:bg-[#f1f5f9]'
                               : 'border-[#383838] bg-[#222222] text-[#aaaaaa] hover:text-white hover:bg-[#2c2c2c]'
                           }`}
                         >
@@ -1101,9 +1930,9 @@ export const FontDetailPage: React.FC<FontDetailPageProps> = ({
                   </div>
 
                   {/* AUTO TAGS */}
-                  <div className="pt-2 border-t border-[#262626]">
+                  <div className={`pt-2 border-t ${isLight ? 'border-[#e2e8f0]' : 'border-[#262626]'}`}>
                     <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-[#888888] block text-[11px]">AUTO TAGS</span>
+                      <span className={`block text-[11px] ${isLight ? 'text-[#64748b]' : 'text-[#888888]'}`}>AUTO TAGS</span>
                       <button
                         type="button"
                         onClick={() => {
@@ -1120,7 +1949,11 @@ export const FontDetailPage: React.FC<FontDetailPageProps> = ({
                             category: auto.suggestedCategory || font.category,
                           });
                         }}
-                        className="px-2 py-0.5 rounded text-[11px] font-medium bg-[#252525] hover:bg-[#303030] text-[#cccccc] border border-[#383838] transition-colors"
+                        className={`px-2 py-0.5 rounded text-[11px] font-medium border transition-colors ${
+                          isLight
+                            ? 'bg-[#f8fafc] hover:bg-[#f1f5f9] text-[#334155] border-[#cbd5e1]'
+                            : 'bg-[#252525] hover:bg-[#303030] text-[#cccccc] border-[#383838]'
+                        }`}
                         title="Scan font metadata and automatically apply matching tags"
                       >
                         <span>Auto-scan Metadata</span>
@@ -1139,100 +1972,125 @@ export const FontDetailPage: React.FC<FontDetailPageProps> = ({
                         ))}
                       </div>
                     ) : (
-                      <p className="text-xs italic text-[#777777]">
+                      <p className={`text-xs italic ${isLight ? 'text-[#94a3b8]' : 'text-[#777777]'}`}>
                         No system tags detected. Click Auto-scan to scan font metadata.
                       </p>
                     )}
                   </div>
                 </div>
                 <div>
-                  <span className="text-[#888888] block text-[11px]">Glyphs Count</span>
-                  <span className="font-mono text-white">
-                    {font.numGlyphs ? `${font.numGlyphs.toLocaleString()} glyphs` : '350+ glyphs'}
+                  <span className={`block text-[11px] ${isLight ? 'text-[#64748b]' : 'text-[#888888]'}`}>Glyphs Count</span>
+                  <span className={`font-mono ${isLight ? 'text-[#0f172a]' : 'text-white'}`}>
+                    {font.numGlyphs ? `${font.numGlyphs.toLocaleString()} glyphs` : 'Standard charset'}
                   </span>
                 </div>
                 <div>
-                  <span className="text-[#888888] block text-[11px]">Styles Count</span>
-                  <span className="font-medium text-white">{font.stylesCount} styles</span>
+                  <span className={`block text-[11px] ${isLight ? 'text-[#64748b]' : 'text-[#888888]'}`}>Styles Count</span>
+                  <span className={`font-medium ${isLight ? 'text-[#0f172a]' : 'text-white'}`}>{font.stylesCount} styles</span>
                 </div>
                 <div>
-                  <span className="text-[#888888] block text-[11px]">File Source</span>
-                  <span className="font-medium text-accent">
-                    {font.provider === 'Local' ? 'Local File' : font.provider === 'System' ? 'System Font' : 'Google Fonts Library'}
-                  </span>
+                  <span className={`block text-[11px] ${isLight ? 'text-[#64748b]' : 'text-[#888888]'}`}>File Source</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (font.filePath || font.fileName) {
+                        navigator.clipboard?.writeText(font.filePath || font.fileName);
+                        setCopiedPath(true);
+                        setTimeout(() => setCopiedPath(false), 2000);
+                      }
+                    }}
+                    className="font-medium text-accent hover:underline flex items-center space-x-1"
+                    title="Click to copy file location"
+                  >
+                    <span>
+                      {font.provider === 'Local' ? 'Local File' : font.provider === 'System' ? 'System Font' : 'Google Fonts Library'}
+                    </span>
+                    {copiedPath ? (
+                      <span className="text-green-400 font-semibold text-[9px]">Copied!</span>
+                    ) : (
+                      <Copy className="w-2.5 h-2.5 opacity-60" />
+                    )}
+                  </button>
                 </div>
                 {font.fileSize && (
                   <div>
-                    <span className="text-[#888888] block text-[11px]">File Size</span>
-                    <span className="font-mono text-white">{(font.fileSize / 1024).toFixed(1)} KB</span>
+                    <span className={`block text-[11px] ${isLight ? 'text-[#64748b]' : 'text-[#888888]'}`}>File Size</span>
+                    <span className={`font-mono ${isLight ? 'text-[#0f172a]' : 'text-white'}`}>{(font.fileSize / 1024).toFixed(1)} KB</span>
                   </div>
                 )}
               </div>
 
               {font.fileName && (
-                <div className="pt-2 border-t border-[#292929] text-[11px]">
-                  <span className="text-[#888888] block mb-1">Local File Path:</span>
-                  <code className="bg-[#141414] px-2 py-1 rounded text-[#777777] font-mono block truncate">
+                <div className={`pt-2 border-t text-[11px] ${isLight ? 'border-[#e2e8f0]' : 'border-[#292929]'}`}>
+                  <span className={`block mb-1 ${isLight ? 'text-[#64748b]' : 'text-[#888888]'}`}>Local File Path:</span>
+                  <code
+                    onClick={() => {
+                      navigator.clipboard?.writeText(font.filePath || font.fileName || '');
+                      setCopiedPath(true);
+                      setTimeout(() => setCopiedPath(false), 2000);
+                    }}
+                    className="bg-[#141414] px-2 py-1 rounded text-[#777777] hover:text-white cursor-pointer font-mono block truncate transition-colors"
+                    title="Click to copy path"
+                  >
                     {font.filePath || font.fileName}
                   </code>
                 </div>
               )}
             </div>
 
-            <div className="bg-[#1e1e1e] rounded-lg border border-[#2d2d2d] p-5 space-y-3">
-              <div className="flex items-center justify-between">
-                <h2 className="text-sm font-semibold text-white">Licensing & Usage</h2>
-                {font.provider === 'Google' && font.licenseUrl && (
-                  <a
-                    href={font.licenseUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-xs text-accent hover:underline"
-                  >
-                    View Official License ↗
-                  </a>
-                )}
-              </div>
-
-              {font.provider === 'Local' ? (
-                <div className="p-3 bg-[#1c1917] rounded border border-[#442c1d] text-center">
-                  <span className="text-xs text-[#fbbf24] font-medium block">
-                    License not verified for local fonts
-                  </span>
-                </div>
-              ) : (
-                <>
-                  <p className="text-xs text-[#d4d4d4] leading-relaxed">
-                    {font.license || 'Licensed under standard font terms.'}
-                  </p>
-
-                  {font.copyright && (
-                    <div className="pt-2 border-t border-[#2a2a2a] text-[11px] text-[#888888]">
-                      <span className="font-medium text-[#aaaaaa]">Copyright:</span> {font.copyright}
-                    </div>
+            {/* Licensing block only for Google / Verified Web Fonts */}
+            {showLicensing && (
+              <div className={`rounded-lg border p-5 space-y-3 ${
+                isLight ? 'bg-white border-[#e2e8f0]' : 'bg-[#1e1e1e] border-[#2d2d2d]'
+              }`}>
+                <div className="flex items-center justify-between">
+                  <h2 className={`text-sm font-semibold ${isLight ? 'text-[#0f172a]' : 'text-white'}`}>Licensing & Usage</h2>
+                  {font.licenseUrl && (
+                    <a
+                      href={font.licenseUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs text-accent hover:underline"
+                    >
+                      View Official License ↗
+                    </a>
                   )}
+                </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-                    <div className="p-3 bg-[#171717] rounded border border-[#292929] space-y-1">
-                      <span className="text-xs font-semibold text-[#22c55e] flex items-center gap-1.5">
-                        <Check className="w-3.5 h-3.5" /> Commercial Usage Allowed
-                      </span>
-                      <p className="text-[11px] text-[#888888]">
-                        Permitted in commercial client logos, websites, digital applications, and print materials.
-                      </p>
-                    </div>
-                    <div className="p-3 bg-[#171717] rounded border border-[#292929] space-y-1">
-                      <span className="text-xs font-semibold text-[#22c55e] flex items-center gap-1.5">
-                        <Check className="w-3.5 h-3.5" /> Personal Projects Allowed
-                      </span>
-                      <p className="text-[11px] text-[#888888]">
-                        Permitted for personal non-commercial experiments, mockups, and desktop design.
-                      </p>
-                    </div>
+                <p className={`text-xs leading-relaxed ${isLight ? 'text-[#475569]' : 'text-[#d4d4d4]'}`}>
+                  {font.license || 'Licensed under standard font terms.'}
+                </p>
+
+                {font.copyright && (
+                  <div className={`pt-2 border-t text-[11px] ${isLight ? 'border-[#e2e8f0] text-[#64748b]' : 'border-[#2a2a2a] text-[#888888]'}`}>
+                    <span className={`font-medium ${isLight ? 'text-[#334155]' : 'text-[#aaaaaa]'}`}>Copyright:</span> {font.copyright}
                   </div>
-                </>
-              )}
-            </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                  <div className={`p-3 rounded border space-y-1 ${
+                    isLight ? 'bg-[#f8fafc] border-[#e2e8f0]' : 'bg-[#171717] border-[#292929]'
+                  }`}>
+                    <span className="text-xs font-semibold text-[#22c55e] flex items-center gap-1.5">
+                      <Check className="w-3.5 h-3.5" /> Commercial Usage Allowed
+                    </span>
+                    <p className={`text-[11px] ${isLight ? 'text-[#64748b]' : 'text-[#888888]'}`}>
+                      Permitted in commercial client logos, websites, digital applications, and print materials.
+                    </p>
+                  </div>
+                  <div className={`p-3 rounded border space-y-1 ${
+                    isLight ? 'bg-[#f8fafc] border-[#e2e8f0]' : 'bg-[#171717] border-[#292929]'
+                  }`}>
+                    <span className="text-xs font-semibold text-[#22c55e] flex items-center gap-1.5">
+                      <Check className="w-3.5 h-3.5" /> Personal Projects Allowed
+                    </span>
+                    <p className={`text-[11px] ${isLight ? 'text-[#64748b]' : 'text-[#888888]'}`}>
+                      Permitted for personal non-commercial experiments, mockups, and desktop design.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
