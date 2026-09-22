@@ -108,36 +108,14 @@ export async function parseFontBuffer(
       numGlyphs = parsedFont.numGlyphs || (parsedFont.glyphs ? parsedFont.glyphs.length : 256);
       unitsPerEm = parsedFont.unitsPerEm || 1000;
 
-      // Extract all supported unicode codepoints directly from cmap table, filtering out empty placeholder glyphs
+      // Fast extraction of supported unicode codepoints directly from cmap table (no eager bezier decomposition)
       if (parsedFont.tables && parsedFont.tables.cmap && parsedFont.tables.cmap.glyphIndexMap) {
         const glyphMap = parsedFont.tables.cmap.glyphIndexMap;
         const codepoints: number[] = [];
         for (const key of Object.keys(glyphMap)) {
           const cp = Number(key);
-          if (cp <= 0) continue;
-          const gIndex = glyphMap[cp];
-          if (!gIndex) continue;
-          const g = parsedFont.glyphs ? parsedFont.glyphs.get(gIndex) : null;
-          if (!g) continue;
-          // Require actual outline commands so empty glyph slots don't render as blank boxes or dots
-          if (cp === 32 || (g.path && g.path.commands && g.path.commands.length > 0)) {
+          if (cp > 0 && glyphMap[cp]) {
             codepoints.push(cp);
-          }
-        }
-        (buffer as any).__supportedCodepoints = codepoints;
-      } else if (parsedFont.glyphs && parsedFont.glyphs.length) {
-        const codepoints: number[] = [];
-        for (let i = 0; i < parsedFont.glyphs.length; i++) {
-          const g = parsedFont.glyphs.get(i);
-          if (!g) continue;
-          const hasPath = (g.path && g.path.commands && g.path.commands.length > 0);
-          if (g.unicode !== undefined && g.unicode > 0 && (g.unicode === 32 || hasPath)) {
-            codepoints.push(g.unicode);
-          }
-          if (g.unicodes && g.unicodes.length) {
-            for (const u of g.unicodes) {
-              if (u > 0 && (u === 32 || hasPath) && !codepoints.includes(u)) codepoints.push(u);
-            }
           }
         }
         (buffer as any).__supportedCodepoints = codepoints;

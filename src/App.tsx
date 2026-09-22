@@ -761,7 +761,7 @@ export default function App() {
 
       // 3. Parse all fonts and assign folderId
       const allParsedFonts: FontItem[] = [];
-      const BATCH_SIZE = 25;
+      const BATCH_SIZE = 20;
       let totalProcessed = 0;
 
       for (const [key, entries] of subfolderMap.entries()) {
@@ -771,16 +771,17 @@ export default function App() {
           for (const entry of batch) {
             try {
               const buf = await entry.file.arrayBuffer();
+              if (!buf || buf.byteLength === 0) continue;
               const fullDiskPath = entry.fullPath || (entry.file as any).path;
-              // RAM optimization: only first 60 fonts register immediately.
-              // All remaining fonts register lazily on-demand when rendered in viewport!
+              // True on-demand memory virtualization: do NOT eagerly create thousands of FontFace objects.
+              // Viewport LRU loader registers visible fonts on-the-fly as user scrolls!
               const item = await parseFontBuffer(
                 entry.file.name,
                 buf,
                 targetFolderId,
                 entry.file.size,
                 fullDiskPath,
-                totalProcessed >= 60
+                true // skipImmediateRegister
               );
               item.filePath = fullDiskPath || entry.relativePath;
               allParsedFonts.push(item);
@@ -789,9 +790,9 @@ export default function App() {
             }
           }
           totalProcessed += batch.length;
-          if (scannedFiles.length > 50) {
+          if (scannedFiles.length > 20) {
             setNotification('Reading fonts: ' + Math.min(totalProcessed, scannedFiles.length) + ' / ' + scannedFiles.length + '...');
-            await new Promise((r) => setTimeout(r, 0));
+            await new Promise((r) => setTimeout(r, 4));
           }
         }
       }
