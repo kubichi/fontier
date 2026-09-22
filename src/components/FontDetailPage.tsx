@@ -125,7 +125,7 @@ export const FontDetailPage: React.FC<FontDetailPageProps> = ({
 
   // Keyboard arrow keys for kerning adjustment & navigation in Wordmark Studio
   useEffect(() => {
-    if (activeTab !== 'wordmark') return;
+    if (activeTab !== 'wordmark' && activeTab !== 'kern') return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       const activeEl = document.activeElement;
@@ -1409,8 +1409,8 @@ export const FontDetailPage: React.FC<FontDetailPageProps> = ({
                   </div>
                   <input
                     type="range"
-                    min="-20"
-                    max="80"
+                    min="-80"
+                    max="100"
                     value={globalTracking}
                     onChange={(e) => setGlobalTracking(Number(e.target.value))}
                     className="w-full h-1.5 bg-[#333333] rounded-lg appearance-none cursor-pointer accent-accent"
@@ -1630,88 +1630,89 @@ export const FontDetailPage: React.FC<FontDetailPageProps> = ({
                   const showLeftDistance = selectedLetterIdx !== null && selectedLetterIdx === index && index > 0 && shiftSelectedLetterIdx === null;
 
                   return (
-                    <React.Fragment key={`kern-frag-${index}-${char}`}>
-                      {/* Spacing / Distance Indicator Line directly IN BETWEEN letters */}
-                      {index > 0 && (
+                    <div
+                      key={`kern-node-${index}-${char}`}
+                      className="relative flex flex-col items-center group cursor-grab active:cursor-grabbing select-none shrink-0"
+                      style={{
+                        marginLeft: index > 0 ? `${spacingPx}px` : 0,
+                        zIndex: isDraggingThis ? 50 : isSelected ? 40 : isShiftSelected ? 30 : 10 + index,
+                      }}
+                      onMouseDown={(e) => handleLetterMouseDown(index, e)}
+                    >
+                      {/* Floating distance indicator badge when this letter or span is selected */}
+                      {(showLeftDistance || isWithinSpan) && index > 0 && (
                         <div
-                          className="flex items-center justify-center relative select-none shrink-0"
+                          className="absolute -top-7 pointer-events-none z-30 flex items-center justify-center"
                           style={{
-                            width: `${Math.max(14, spacingPx)}px`,
-                            minWidth: `${Math.max(14, spacingPx)}px`,
-                            height: `${kernFontSize}px`,
+                            left: spacingPx < 0 ? `${Math.round(spacingPx / 2)}px` : 0,
+                            transform: 'translateX(-50%)',
                           }}
                         >
-                          {(showLeftDistance || isWithinSpan) ? (
-                            <div className="w-full flex items-center justify-center relative px-0.5 z-20">
-                              <div className="w-full border-b-2 border-dashed border-accent opacity-90" />
-                              <span className="absolute px-1.5 py-0.5 bg-accent text-white font-mono text-[9px] font-bold rounded shadow-md whitespace-nowrap">
-                                {spacingPx}px
-                              </span>
-                            </div>
-                          ) : null}
+                          <span
+                            className={`px-1.5 py-0.5 font-mono text-[9px] font-bold rounded shadow-md whitespace-nowrap ${
+                              spacingPx < 0
+                                ? 'bg-rose-500 text-white'
+                                : spacingPx === 0
+                                ? 'bg-amber-500 text-white'
+                                : 'bg-accent text-white'
+                            }`}
+                          >
+                            {spacingPx > 0 ? `+${spacingPx}px` : `${spacingPx}px`}
+                          </span>
                         </div>
                       )}
 
-                      {/* Letter Glyph Container */}
+                      {/* Character Offset Pill / Drag Handle above */}
                       <div
-                        className="relative flex flex-col items-center group cursor-grab active:cursor-grabbing select-none shrink-0"
-                        style={{
-                          zIndex: isDraggingThis ? 40 : isSelected ? 30 : 10,
-                        }}
-                        onMouseDown={(e) => handleLetterMouseDown(index, e)}
+                        className={`text-[9px] font-mono px-1.5 py-0.5 rounded mb-1 transition-all pointer-events-none ${
+                          isDraggingThis
+                            ? 'bg-accent text-white scale-110 shadow-md font-bold'
+                            : isSelected || isShiftSelected
+                            ? 'bg-accent text-white shadow-xs font-semibold'
+                            : isWithinSpan
+                            ? 'bg-accent/40 text-white'
+                            : offset !== 0
+                            ? 'bg-accent/20 text-accent'
+                            : 'opacity-0 group-hover:opacity-80 bg-[#333333] text-[#aaaaaa]'
+                        }`}
                       >
-                        {/* Character Offset Pill / Drag Handle above */}
-                        <div
-                          className={`text-[9px] font-mono px-1.5 py-0.5 rounded mb-1 transition-all pointer-events-none ${
-                            isDraggingThis
-                              ? 'bg-accent text-white scale-110 shadow-md font-bold'
-                              : isSelected || isShiftSelected
-                              ? 'bg-accent text-white shadow-xs font-semibold'
-                              : isWithinSpan
-                              ? 'bg-accent/40 text-white'
-                              : offset !== 0
-                              ? 'bg-accent/20 text-accent'
-                              : 'opacity-0 group-hover:opacity-80 bg-[#333333] text-[#aaaaaa]'
-                          }`}
-                        >
-                          {isDraggingThis ? `${offset > 0 ? `+${offset}` : offset}px` : (offset > 0 ? `+${offset}` : offset !== 0 ? `${offset}` : `${index + 1}`)}
-                        </div>
+                        {isDraggingThis ? `${offset > 0 ? `+${offset}` : offset}px` : (offset > 0 ? `+${offset}` : offset !== 0 ? `${offset}` : `${index + 1}`)}
+                      </div>
 
-                        {/* Letter Glyph Box */}
-                        <div
-                          className={`px-1 py-0.5 rounded-lg transition-all ${
-                            isDraggingThis
-                              ? 'ring-2 ring-accent bg-accent/25 shadow-lg'
-                              : isSelected || isShiftSelected
-                              ? 'ring-2 ring-accent bg-accent/15'
-                              : isWithinSpan
-                              ? 'ring-1 ring-accent/60 bg-accent/10'
-                              : 'hover:bg-white/5'
-                          }`}
+                      {/* Letter Glyph Box */}
+                      <div
+                        className={`px-1 py-0.5 rounded-lg transition-all ${
+                          isDraggingThis
+                            ? 'ring-2 ring-accent bg-accent/25 shadow-lg'
+                            : isSelected || isShiftSelected
+                            ? 'ring-2 ring-accent bg-accent/15'
+                            : isWithinSpan
+                            ? 'ring-1 ring-accent/60 bg-accent/10'
+                            : 'hover:bg-white/5'
+                        }`}
+                      >
+                        <span
+                          style={{
+                            fontFamily: cleanFontFamily,
+                            color: wordmarkTextColor,
+                            fontWeight: selectedStyle.weight,
+                            fontStyle: selectedStyle.style,
+                            fontSize: `${kernFontSize}px`,
+                            lineHeight: 1,
+                            display: 'inline-block',
+                          }}
                         >
-                          <span
-                            style={{
-                              fontFamily: cleanFontFamily,
-                              color: wordmarkTextColor,
-                              fontWeight: selectedStyle.weight,
-                              fontStyle: selectedStyle.style,
-                              fontSize: `${kernFontSize}px`,
-                              lineHeight: 1,
-                              display: 'inline-block',
-                            }}
-                          >
-                            {char === ' ' ? '\u00A0' : char}
-                          </span>
-                        </div>
-
-                        {/* Sub-index indicator */}
-                        <span className={`text-[8px] font-mono mt-1 transition-opacity ${
-                          isSelected || isShiftSelected || isWithinSpan ? 'text-accent font-bold opacity-100' : 'text-[#666666] opacity-30'
-                        }`}>
-                          #{index + 1}
+                          {char === ' ' ? '\u00A0' : char}
                         </span>
                       </div>
-                    </React.Fragment>
+
+                      {/* Sub-index indicator */}
+                      <span className={`text-[8px] font-mono mt-1 transition-opacity ${
+                        isSelected || isShiftSelected || isWithinSpan ? 'text-accent font-bold opacity-100' : 'text-[#666666] opacity-30'
+                      }`}>
+                        #{index + 1}
+                      </span>
+                    </div>
                   );
                 })}
               </div>
