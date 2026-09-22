@@ -37,24 +37,18 @@ const DEFAULT_SETTINGS: AppSettings = {
 };
 
 export default function App() {
-  // Load fonts from localStorage or fallback to default
+  // Load local user-imported fonts from localStorage or empty array (provider fonts are fetched live)
   const [fonts, setFonts] = useState<FontItem[]>(() => {
     try {
-      const saved = localStorage.getItem('fontbase_fonts');
+      const saved = localStorage.getItem('fontbase_local_fonts') || localStorage.getItem('fontbase_fonts');
       if (saved) {
         const parsed: FontItem[] = JSON.parse(saved);
         return parsed
-          // Migration: filter out hidden AppleDouble dot files (._*) and obsolete family names
           .filter((f) => {
-            if (f.name && (f.name.startsWith('._') || f.name.startsWith('.'))) {
-              return false;
-            }
-            if (f.fileName && (f.fileName.startsWith('._') || f.fileName.startsWith('.'))) {
-              return false;
-            }
-            if (f.provider === 'Local' && f.fontFamily && f.fontFamily.includes('UserFont_local_')) {
-              return false;
-            }
+            if (f.provider !== 'Local') return false;
+            if (f.name && (f.name.startsWith('._') || f.name.startsWith('.'))) return false;
+            if (f.fileName && (f.fileName.startsWith('._') || f.fileName.startsWith('.'))) return false;
+            if (f.fontFamily && f.fontFamily.includes('UserFont_local_')) return false;
             return true;
           })
           .map((f) => {
@@ -73,15 +67,7 @@ export default function App() {
     } catch (e) {
       console.error(e);
     }
-    return INITIAL_FONTS.map((f) => {
-      const auto = autoTagFontMetadata({
-        fontName: f.name,
-        postScriptName: f.postScriptName,
-        fileName: f.fileName,
-        subfamily: f.styles?.[0]?.name,
-      });
-      return { ...f, tags: auto.tags };
-    });
+    return [];
   });
 
 
@@ -281,9 +267,29 @@ export default function App() {
       .then((incoming) => {
         if (isCancelled || incoming.length === 0) return;
 
+        // Load stored overrides for active/favorite/folderId states
+        let overrides: Record<string, { active?: boolean; favorite?: boolean; folderId?: string }> = {};
+        try {
+          const raw = localStorage.getItem('fontbase_font_overrides');
+          if (raw) overrides = JSON.parse(raw);
+        } catch {}
+
+        const appliedIncoming = incoming.map((f) => {
+          const o = overrides[f.id];
+          if (o) {
+            return {
+              ...f,
+              active: o.active !== undefined ? o.active : f.active,
+              favorite: o.favorite !== undefined ? o.favorite : f.favorite,
+              folderId: o.folderId || f.folderId,
+            };
+          }
+          return f;
+        });
+
         setFonts((prev) => {
           const existingIds = new Set(prev.map((f) => f.id));
-          const unique = incoming.filter((f) => !existingIds.has(f.id));
+          const unique = appliedIncoming.filter((f) => !existingIds.has(f.id));
           if (unique.length === 0) return prev;
           return [...prev, ...unique];
         });
@@ -357,14 +363,15 @@ export default function App() {
   useEffect(() => {
     const timeout = setTimeout(() => {
       try {
-        // Only persist non-system fonts to prevent huge stringify latency with 8k fonts
-        const customOnly = fonts.filter((f) => f.provider !== 'System');
-        localStorage.setItem('fontbase_fonts', JSON.stringify(customOnly));
+        // Only persist local user-imported fonts to prevent saving huge catalogs to localStorage
+        const localOnly = fonts.filter((f) => f.provider === 'Local');
+        localStorage.setItem('fontbase_local_fonts', JSON.stringify(localOnly));
+        localStorage.setItem('fontbase_fonts', JSON.stringify(localOnly));
 
-        // Save overrides (active/favorite/folder) for system fonts in a tiny compact dictionary
+        // Save overrides (active/favorite/folder) for all provider and system fonts in a compact dictionary
         const overrides: Record<string, { active?: boolean; favorite?: boolean; folderId?: string }> = {};
         for (const f of fonts) {
-          if (f.provider === 'System' && (!f.active || f.favorite || f.folderId)) {
+          if (f.provider !== 'Local' && (!f.active || f.favorite || f.folderId)) {
             overrides[f.id] = {
               active: f.active,
               favorite: f.favorite,
@@ -422,20 +429,46 @@ export default function App() {
     });
   };
 
-  const handleResetAllData = () => {
-    setFonts(INITIAL_FONTS);
+  const handleResetAllData = async () => {
+    try {
+      localStorage.removeItem('fontbase_fonts');
+      localStorage.removeItem('fontbase_local_fonts');
+      localStorage.removeItem('fontbase_font_overrides');
+      localStorage.removeItem('fontbase_folders');
+      localStorage.removeItem('fontbase_app_settings');
+      localStorage.removeItem('fontbase_custom_presets');
+      localStorage.removeItem('fontier_enabled_providers');
+    } catch {
+      // ignore
+    }
+
     setFolders(INITIAL_FOLDERS);
     setAppSettings(DEFAULT_SETTINGS);
     setFilters(DEFAULT_FILTERS);
     setCurrentFilter('all');
+    setEnabledProviders(['google', 'fontshare', 'openfoundry', 'freefaces', 'uncut', 'velvetyne', 'collletttivo']);
+
+    // Fetch and reload all 2,120+ provider fonts fresh!
     try {
-      localStorage.removeItem('fontbase_fonts');
-      localStorage.removeItem('fontbase_folders');
-      localStorage.removeItem('fontbase_app_settings');
-      localStorage.removeItem('fontbase_custom_presets');
-    } catch {
-      // ignore
+      const freshProviders = await fetchAllProvidersFonts();
+      setFonts(freshProviders);
+    } catch (e) {
+      console.error('Reset font fetch error:', e);
     }
+
+    // Re-detect system fonts
+    detectWindowsSystemFonts().then((sysFonts) => {
+      if (sysFonts.length > 0) {
+        setFonts((prev) => {
+          const existingNames = new Set(prev.map((f) => f.name.toLowerCase()));
+          const uniqueSys = sysFonts.filter((f) => !existingNames.has(f.name.toLowerCase()));
+          return [...prev, ...uniqueSys];
+        });
+      }
+    });
+
+    setNotification('Factory reset complete. All catalogs and settings restored.');
+    setTimeout(() => setNotification(null), 3500);
   };
 
   const handleUpdateFilters = (updates: Partial<FontFilters>) => {
