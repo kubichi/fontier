@@ -1259,31 +1259,40 @@ export default function App() {
     for (let i = 0; i < fonts.length; i++) {
       const f = fonts[i];
 
-      // 1. Sidebar navigation filter
-      if (isRecent) {
-        if (list.length >= maxRecent) break;
-      } else if (currentFilter === 'favorites') {
-        if (!f.favorite) continue;
-      } else if (currentFilter === 'active') {
-        if (!f.active) continue;
-      } else if (currentFilter === 'inactive') {
-        if (f.active) continue;
-      } else if (currentFilter === 'featured') {
-        if (!f.favorite && !f.active) continue;
-      } else if (currentFilter === 'provider-google') {
-        if (f.provider !== 'Google') continue;
-      } else if (currentFilter === 'provider-local') {
+      // 1. Source Filter (Search Dropdown) vs Sidebar Category Navigation
+      if (filters.provider === 'local') {
         if (f.provider !== 'Local') continue;
-      } else if (currentFilter === 'provider-system') {
+      } else if (filters.provider === 'google') {
+        // Online Providers: Google, Fontshare, UNCUT, Velvetyne, Collletttivo, Free Faces, Open Foundry
+        if (f.provider === 'Local' || f.provider === 'System') continue;
+      } else if (filters.provider === 'system') {
         if (f.provider !== 'System') continue;
-      } else if (currentFilter.startsWith('provider-')) {
-        const provKey = currentFilter.replace('provider-', '').toLowerCase().replace(/[\s-_]/g, '');
-        const fProvKey = (f.provider || '').toLowerCase().replace(/[\s-_]/g, '');
-        if (fProvKey !== provKey) continue;
-      } else if (isFolder) {
-        if (!f.folderId || !folderFilterIds.has(f.folderId)) continue;
+      } else {
+        // Fallback to active Sidebar tab/folder when Source is set to "All Sources"
+        if (isRecent) {
+          if (list.length >= maxRecent) break;
+        } else if (currentFilter === 'favorites') {
+          if (!f.favorite) continue;
+        } else if (currentFilter === 'active') {
+          if (!f.active) continue;
+        } else if (currentFilter === 'inactive') {
+          if (f.active) continue;
+        } else if (currentFilter === 'featured') {
+          if (!f.favorite && !f.active) continue;
+        } else if (currentFilter === 'provider-google') {
+          if (f.provider !== 'Google') continue;
+        } else if (currentFilter === 'provider-local') {
+          if (f.provider !== 'Local') continue;
+        } else if (currentFilter === 'provider-system') {
+          if (f.provider !== 'System') continue;
+        } else if (currentFilter.startsWith('provider-')) {
+          const provKey = currentFilter.replace('provider-', '').toLowerCase().replace(/[\s-_]/g, '');
+          const fProvKey = (f.provider || '').toLowerCase().replace(/[\s-_]/g, '');
+          if (fProvKey !== provKey) continue;
+        } else if (isFolder) {
+          if (!f.folderId || !folderFilterIds.has(f.folderId)) continue;
+        }
       }
-
 
       // 2. Status filter
       if (filters.status === 'active') {
@@ -1292,15 +1301,6 @@ export default function App() {
         if (!f.favorite) continue;
       } else if (filters.status === 'inactive') {
         if (f.active) continue;
-      }
-
-      // 3. Provider filter
-      if (filters.provider === 'google') {
-        if (f.provider !== 'Google') continue;
-      } else if (filters.provider === 'local') {
-        if (f.provider !== 'Local') continue;
-      } else if (filters.provider === 'system') {
-        if (f.provider !== 'System') continue;
       }
 
       // 4. Format filter

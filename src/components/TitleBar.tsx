@@ -481,7 +481,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
                 >
                   <option value="all">All Sources</option>
                   <option value="local">Local Folder Only</option>
-                  <option value="google">Google Fonts Only</option>
+                  <option value="google">Online Providers Only</option>
                   <option value="system">System Fonts Only</option>
                 </select>
               </div>

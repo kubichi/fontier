@@ -53,11 +53,18 @@ export const FontDetailPage: React.FC<FontDetailPageProps> = ({
 }) => {
   const isLight = theme === 'light';
   const [activeTab, setActiveTab] = useState<DetailTab>('glyphs');
+  const [, setFontLoadedKey] = useState<number>(0);
 
   // Ensure font face is loaded into the app
   useEffect(() => {
-    ensureFontLoaded(font);
-  }, [font.id, font.name, font.fontFamily, font.filePath, font.provider]);
+    let isMounted = true;
+    ensureFontLoaded(font).then(() => {
+      if (isMounted) setFontLoadedKey((k) => k + 1);
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [font.id, font.name, font.fontFamily, font.filePath, font.provider, font.postScriptName]);
 
   const [selectedStyle, setSelectedStyle] = useState<FontStyle>(
     font.styles[0] || { name: 'Regular', weight: 400, style: 'normal' }
@@ -208,8 +215,14 @@ export const FontDetailPage: React.FC<FontDetailPageProps> = ({
   }, [dragState]);
 
   const cleanFontFamily = useMemo(() => {
-    return font.fontFamily.split(',')[0].trim().replace(/['"]/g, '');
-  }, [font.fontFamily]);
+    const fam = font.fontFamily ? font.fontFamily.split(',')[0].replace(/['"]/g, '').trim() : '';
+    const name = (font.name || '').replace(/['"]/g, '').trim();
+    const ps = (font.postScriptName || '').replace(/['"]/g, '').trim();
+    return Array.from(new Set([fam, name, ps].filter(Boolean)))
+      .map((f) => `"${f}"`)
+      .concat(['sans-serif'])
+      .join(', ');
+  }, [font.fontFamily, font.name, font.postScriptName]);
 
   // Robust Path Copy
   const copyPath = async (text: string) => {
@@ -319,11 +332,6 @@ export const FontDetailPage: React.FC<FontDetailPageProps> = ({
   };
 
   const showLicensing = font.provider !== 'Local' && font.provider !== 'System' && (Boolean(font.license) || Boolean(font.licenseUrl));
-
-  // Ensure font is loaded into Chromium font engine so glyphs and pangrams render correctly
-  useEffect(() => {
-    ensureFontLoaded(font);
-  }, [font]);
 
   // If font lacks supportedCodepoints, parse on demand from binary buffer
   useEffect(() => {

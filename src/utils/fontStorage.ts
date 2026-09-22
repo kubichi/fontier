@@ -101,7 +101,7 @@ export async function saveFontBinary(id: string, familyName: string, buffer: Arr
  * Registers a font into document.fonts using the FontFace API.
  * Returns the FontFace object so it can be stored in the cache.
  */
-export async function registerFontFace(familyName: string, buffer: ArrayBuffer): Promise<FontFace | null> {
+export async function registerFontFace(familyName: string, buffer: ArrayBuffer | Uint8Array): Promise<FontFace | null> {
   if (typeof document === 'undefined') return null;
 
   const cleanFamily = familyName.replace(/['"]/g, '').trim();
@@ -114,8 +114,17 @@ export async function registerFontFace(familyName: string, buffer: ArrayBuffer):
 
   let blobUrl = '';
   try {
-    // Do NOT slice — we just need a temporary view for the Blob constructor
-    const blob = new Blob([buffer], { type: 'font/truetype' });
+    let arrayBuffer: ArrayBuffer;
+    if ((buffer as any)?.buffer && (buffer as any)?.byteOffset !== undefined && (buffer as any)?.byteLength !== undefined) {
+      const u8 = buffer as unknown as Uint8Array;
+      arrayBuffer = u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength) as ArrayBuffer;
+    } else if (buffer instanceof ArrayBuffer) {
+      arrayBuffer = buffer;
+    } else {
+      arrayBuffer = new Uint8Array(buffer as any).buffer as ArrayBuffer;
+    }
+
+    const blob = new Blob([arrayBuffer], { type: 'font/truetype' });
     blobUrl = URL.createObjectURL(blob);
 
     const face = new FontFace(cleanFamily, 'url("' + blobUrl + '")', { display: 'swap' });
@@ -159,7 +168,6 @@ export async function rehydrateAllStoredFonts(maxCount = 30): Promise<number> {
           try {
             const face = await registerFontFace(item.familyName, item.buffer);
             if (face) {
-              // The cache setting is handled inside registerFontFace now, but we can do it explicitly or skip.
               count++;
             }
           } catch {
@@ -192,8 +200,12 @@ const pendingLoads = new Map<string, Promise<boolean>>();
 /**
  * On-demand lazy font loader with duplicate request prevention and failure caching.
  */
-export async function ensureFontLoaded(font: { id: string; name?: string; fontFamily: string; filePath?: string; provider: string }): Promise<boolean> {
-  const cleanFamily = (font.name || font.fontFamily.split(',')[0]).replace(/['"]/g, '').trim();
+export async function ensureFontLoaded(font: { id: string; name?: string; fontFamily: string; filePath?: string; provider: string; postScriptName?: string }): Promise<boolean> {
+  const familyFromProp = font.fontFamily ? font.fontFamily.split(',')[0].replace(/['"]/g, '').trim() : '';
+  const nameFromProp = (font.name || '').replace(/['"]/g, '').trim();
+  const psName = (font.postScriptName || '').replace(/['"]/g, '').trim();
+  
+  const cleanFamily = familyFromProp || nameFromProp;
   if (!cleanFamily) return false;
 
   // 1. Google Fonts
@@ -243,14 +255,16 @@ export async function ensureFontLoaded(font: { id: string; name?: string; fontFa
     return true;
   }
 
-  if (fontCache.get(cleanFamily)) {
+  // 4. Local Fonts: register all name variants so CSS matches regardless of familyGroup or fontName
+  const cacheKey = font.id || cleanFamily;
+  if (fontCache.get(cleanFamily) || (familyFromProp && fontCache.get(familyFromProp)) || (nameFromProp && fontCache.get(nameFromProp))) {
     return true; // Already loaded and promoted
   }
-  if (failedFamilies.has(cleanFamily)) {
+  if (failedFamilies.has(cacheKey)) {
     return false; // Skip failed font to avoid hammering disk / IPC
   }
-  if (pendingLoads.has(cleanFamily)) {
-    return pendingLoads.get(cleanFamily)!;
+  if (pendingLoads.has(cacheKey)) {
+    return pendingLoads.get(cacheKey)!;
   }
 
   const loadPromise = (async (): Promise<boolean> => {
@@ -258,11 +272,14 @@ export async function ensureFontLoaded(font: { id: string; name?: string; fontFa
     if (font.filePath && typeof (window as any).electronAPI?.readFontFile === 'function') {
       try {
         const buf = await (window as any).electronAPI.readFontFile(font.filePath);
-        if (buf && buf.byteLength > 0) {
-          const face = await registerFontFace(cleanFamily, buf);
-          if (face) {
-            return true;
+        if (buf) {
+          const families = Array.from(new Set([cleanFamily, familyFromProp, nameFromProp, psName].filter(Boolean)));
+          let loaded = false;
+          for (const fam of families) {
+            const face = await registerFontFace(fam, buf);
+            if (face) loaded = true;
           }
+          if (loaded) return true;
         }
       } catch (e) {
         console.warn('Could not load font file from disk:', font.filePath, e);
@@ -280,25 +297,28 @@ export async function ensureFontLoaded(font: { id: string; name?: string; fontFa
         req.onerror = () => resolve(null);
       });
       if (record && record.buffer) {
-        const face = await registerFontFace(cleanFamily, record.buffer);
-        if (face) {
-          return true;
+        const families = Array.from(new Set([cleanFamily, familyFromProp, nameFromProp, psName].filter(Boolean)));
+        let loaded = false;
+        for (const fam of families) {
+          const face = await registerFontFace(fam, record.buffer);
+          if (face) loaded = true;
         }
+        if (loaded) return true;
       }
     } catch (e) {
       // ignore
     }
 
     // Remember failed family to prevent continuous retries
-    failedFamilies.add(cleanFamily);
+    failedFamilies.add(cacheKey);
     return false;
   })();
 
-  pendingLoads.set(cleanFamily, loadPromise);
+  pendingLoads.set(cacheKey, loadPromise);
   try {
     return await loadPromise;
   } finally {
-    pendingLoads.delete(cleanFamily);
+    pendingLoads.delete(cacheKey);
   }
 }
 
