@@ -53,6 +53,12 @@ export const FontDetailPage: React.FC<FontDetailPageProps> = ({
 }) => {
   const isLight = theme === 'light';
   const [activeTab, setActiveTab] = useState<DetailTab>('glyphs');
+
+  // Ensure font face is loaded into the app
+  useEffect(() => {
+    ensureFontLoaded(font);
+  }, [font.id, font.name, font.fontFamily, font.filePath, font.provider]);
+
   const [selectedStyle, setSelectedStyle] = useState<FontStyle>(
     font.styles[0] || { name: 'Regular', weight: 400, style: 'normal' }
   );

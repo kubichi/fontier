@@ -38,10 +38,8 @@ export const FontRow: React.FC<FontRowProps> = React.memo(({
 }) => {
   // Lazy-load font face into Chromium font cache ONLY when this row is in viewport
   useEffect(() => {
-    if (font.provider === 'Local') {
-      ensureFontLoaded(font);
-    }
-  }, [font.id, font.fontFamily, font.filePath, font.provider]);
+    ensureFontLoaded(font);
+  }, [font.id, font.name, font.fontFamily, font.filePath, font.provider]);
 
   const isLight = theme === 'light';
   const alignClass =
@@ -52,8 +50,9 @@ export const FontRow: React.FC<FontRowProps> = React.memo(({
       : 'text-left';
 
   const isolatedFontFamily = useMemo(() => {
-    return font.fontFamily.split(',')[0].trim();
-  }, [font.fontFamily]);
+    const clean = (font.name || font.fontFamily.split(',')[0]).replace(/['"]/g, '').trim();
+    return `"${clean}", ${font.fontFamily}`;
+  }, [font.name, font.fontFamily]);
 
   const gridDisplayGlyphs = useMemo(() => {
     if (font.supportedCodepoints && font.supportedCodepoints.length > 0) {

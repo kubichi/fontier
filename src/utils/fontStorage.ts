@@ -192,24 +192,57 @@ const pendingLoads = new Map<string, Promise<boolean>>();
 /**
  * On-demand lazy font loader with duplicate request prevention and failure caching.
  */
-export async function ensureFontLoaded(font: { id: string; fontFamily: string; filePath?: string; provider: string }): Promise<boolean> {
-  const cleanFamily = font.fontFamily.split(',')[0].replace(/['"]/g, '').trim();
+export async function ensureFontLoaded(font: { id: string; name?: string; fontFamily: string; filePath?: string; provider: string }): Promise<boolean> {
+  const cleanFamily = (font.name || font.fontFamily.split(',')[0]).replace(/['"]/g, '').trim();
   if (!cleanFamily) return false;
 
+  // 1. Google Fonts
   if (font.provider === 'Google') {
-    const id = `gf-${cleanFamily.replace(/\s+/g, '-').toLowerCase()}`;
+    const id = `gf-${cleanFamily.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
     if (typeof document !== 'undefined' && !document.getElementById(id)) {
       const link = document.createElement('link');
       link.id = id;
       link.rel = 'stylesheet';
-      link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(cleanFamily)}:ital,wght@0,100..900;1,100..900&display=swap`;
+      link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(cleanFamily).replace(/%20/g, '+')}&display=swap`;
+      link.onerror = () => {
+        link.href = `https://fonts.googleapis.com/css?family=${encodeURIComponent(cleanFamily).replace(/%20/g, '+')}:400,700&display=swap`;
+      };
       document.head.appendChild(link);
     }
     return true;
   }
 
-  if (font.provider !== 'Local') return true;
-  
+  // 2. Fontshare Provider
+  if (font.provider === 'Fontshare') {
+    const slug = cleanFamily.toLowerCase().replace(/[^a-z0-9]/g, '-');
+    const id = `fs-${slug}`;
+    if (typeof document !== 'undefined' && !document.getElementById(id)) {
+      const link = document.createElement('link');
+      link.id = id;
+      link.rel = 'stylesheet';
+      link.href = `https://api.fontshare.com/v2/css?f[]=${encodeURIComponent(slug)}@400,500,600,700&display=swap`;
+      document.head.appendChild(link);
+    }
+    return true;
+  }
+
+  // 3. Other Open-Source Providers (UNCUT, Velvetyne, Collletttivo, Free Faces, Open Foundry)
+  if (font.provider !== 'Local' && font.provider !== 'System') {
+    const slug = cleanFamily.toLowerCase().replace(/[^a-z0-9]/g, '-');
+    const id = `provider-font-${slug}`;
+    if (typeof document !== 'undefined' && !document.getElementById(id)) {
+      const link = document.createElement('link');
+      link.id = id;
+      link.rel = 'stylesheet';
+      link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(cleanFamily).replace(/%20/g, '+')}&display=swap`;
+      link.onerror = () => {
+        link.href = `https://fonts.bunny.net/css?family=${slug}:400,700&display=swap`;
+      };
+      document.head.appendChild(link);
+    }
+    return true;
+  }
+
   if (fontCache.get(cleanFamily)) {
     return true; // Already loaded and promoted
   }
