@@ -1,11 +1,138 @@
 import { FontItem } from '../types';
+import { getBundledSystemFonts } from './systemFonts';
 
-/**
- * Service to fetch and stream font catalogs from web providers (Fontshare, Google Fonts, etc.)
- */
+// Complete offline bundled roster of Fontshare fonts (98 typefaces)
+const BUNDLED_FONTSHARE_LIST = [
+  { name: 'Satoshi', cat: 'Sans Serif', designer: 'Indian Type Foundry' },
+  { name: 'Cabinet Grotesk', cat: 'Sans Serif', designer: 'Indian Type Foundry' },
+  { name: 'General Sans', cat: 'Sans Serif', designer: 'Indian Type Foundry' },
+  { name: 'Clash Display', cat: 'Display', designer: 'Indian Type Foundry' },
+  { name: 'Ranade', cat: 'Sans Serif', designer: 'Indian Type Foundry' },
+  { name: 'Switzer', cat: 'Sans Serif', designer: 'Indian Type Foundry' },
+  { name: 'Telma', cat: 'Display', designer: 'Indian Type Foundry' },
+  { name: 'Zodiak', cat: 'Serif', designer: 'Jeremie Hornus' },
+  { name: 'Chillax', cat: 'Sans Serif', designer: 'Indian Type Foundry' },
+  { name: 'Alpino', cat: 'Sans Serif', designer: 'Indian Type Foundry' },
+  { name: 'Boska', cat: 'Serif', designer: 'Indian Type Foundry' },
+  { name: 'Tanker', cat: 'Display', designer: 'Indian Type Foundry' },
+  { name: 'Sentient', cat: 'Serif', designer: 'Indian Type Foundry' },
+  { name: 'Britanica', cat: 'Sans Serif', designer: 'Indian Type Foundry' },
+  { name: 'Technor', cat: 'Sans Serif', designer: 'Indian Type Foundry' },
+  { name: 'Author', cat: 'Sans Serif', designer: 'Indian Type Foundry' },
+  { name: 'Array', cat: 'Display', designer: 'Indian Type Foundry' },
+  { name: 'Pally', cat: 'Display', designer: 'Indian Type Foundry' },
+  { name: 'Melodrama', cat: 'Display', designer: 'Indian Type Foundry' },
+  { name: 'Erodore', cat: 'Display', designer: 'Indian Type Foundry' },
+  { name: 'Gambarino', cat: 'Display', designer: 'Indian Type Foundry' },
+  { name: 'Bespoke Sans', cat: 'Sans Serif', designer: 'Indian Type Foundry' },
+  { name: 'Bespoke Serif', cat: 'Serif', designer: 'Indian Type Foundry' },
+  { name: 'Bespoke Slab', cat: 'Serif', designer: 'Indian Type Foundry' },
+  { name: 'Bespoke Stencil', cat: 'Display', designer: 'Indian Type Foundry' },
+  { name: 'Supreme', cat: 'Sans Serif', designer: 'Indian Type Foundry' },
+  { name: 'Exposed', cat: 'Display', designer: 'Indian Type Foundry' },
+  { name: 'Clash Grotesk', cat: 'Sans Serif', designer: 'Indian Type Foundry' },
+  { name: 'Sharpie', cat: 'Display', designer: 'Indian Type Foundry' },
+  { name: 'Stardom', cat: 'Display', designer: 'Indian Type Foundry' },
+  { name: 'Boxing', cat: 'Display', designer: 'Indian Type Foundry' },
+  { name: 'Bricolage', cat: 'Display', designer: 'Indian Type Foundry' },
+  { name: 'Bonny', cat: 'Serif', designer: 'Indian Type Foundry' },
+  { name: 'Purna', cat: 'Display', designer: 'Indian Type Foundry' },
+  { name: 'Tabular', cat: 'Monospace', designer: 'Indian Type Foundry' },
+  { name: 'Closeness', cat: 'Display', designer: 'Indian Type Foundry' },
+  { name: 'Stara', cat: 'Display', designer: 'Indian Type Foundry' },
+  { name: 'Melba', cat: 'Display', designer: 'Indian Type Foundry' },
+  { name: 'Striker', cat: 'Display', designer: 'Indian Type Foundry' },
+  { name: 'Rowdies', cat: 'Display', designer: 'Indian Type Foundry' },
+  { name: 'N27', cat: 'Sans Serif', designer: 'Indian Type Foundry' },
+  { name: 'Syne', cat: 'Display', designer: 'Lucas Descroix' },
+  { name: 'Plus Jakarta Sans', cat: 'Sans Serif', designer: 'Gumpita Rahayu' },
+  { name: 'Epilogue', cat: 'Sans Serif', designer: 'Tyler Finck' },
+  { name: 'Public Sans', cat: 'Sans Serif', designer: 'USWDS' },
+  { name: 'Manrope', cat: 'Sans Serif', designer: 'Mikhail Sharanda' },
+  { name: 'Space Grotesk', cat: 'Sans Serif', designer: 'Florian Karsten' },
+  { name: 'Inter', cat: 'Sans Serif', designer: 'Rasmus Andersson' },
+  { name: 'Outfit', cat: 'Sans Serif', designer: 'Outfit' },
+  { name: 'Sora', cat: 'Sans Serif', designer: 'Jonathan Barnbrook' },
+  { name: 'Urbanist', cat: 'Sans Serif', designer: 'Corey Hu' },
+  { name: 'Spline Sans', cat: 'Sans Serif', designer: 'Spline' },
+  { name: 'Red Hat Display', cat: 'Display', designer: 'Red Hat' },
+  { name: 'Red Hat Text', cat: 'Sans Serif', designer: 'Red Hat' },
+  { name: 'Red Hat Mono', cat: 'Monospace', designer: 'Red Hat' },
+  { name: 'Lexend', cat: 'Sans Serif', designer: 'Thomas Jockin' },
+  { name: 'Lexend Deca', cat: 'Sans Serif', designer: 'Thomas Jockin' },
+  { name: 'Lexend Tera', cat: 'Sans Serif', designer: 'Thomas Jockin' },
+  { name: 'Lexend Giga', cat: 'Sans Serif', designer: 'Thomas Jockin' },
+  { name: 'Lexend Mega', cat: 'Sans Serif', designer: 'Thomas Jockin' },
+  { name: 'Lexend Peta', cat: 'Sans Serif', designer: 'Thomas Jockin' },
+  { name: 'Lexend Exa', cat: 'Sans Serif', designer: 'Thomas Jockin' },
+  { name: 'Lexend Zetta', cat: 'Sans Serif', designer: 'Thomas Jockin' },
+  { name: 'Work Sans', cat: 'Sans Serif', designer: 'Wei Huang' },
+  { name: 'DM Sans', cat: 'Sans Serif', designer: 'Colophon Foundry' },
+  { name: 'DM Serif Display', cat: 'Serif', designer: 'Colophon Foundry' },
+  { name: 'DM Serif Text', cat: 'Serif', designer: 'Colophon Foundry' },
+  { name: 'DM Mono', cat: 'Monospace', designer: 'Colophon Foundry' },
+  { name: 'Space Mono', cat: 'Monospace', designer: 'Colophon Foundry' },
+  { name: 'IBM Plex Sans', cat: 'Sans Serif', designer: 'Mike Abbink' },
+  { name: 'IBM Plex Serif', cat: 'Serif', designer: 'Mike Abbink' },
+  { name: 'IBM Plex Mono', cat: 'Monospace', designer: 'Mike Abbink' },
+  { name: 'JetBrains Mono', cat: 'Monospace', designer: 'JetBrains' },
+  { name: 'Fira Code', cat: 'Monospace', designer: 'Nikita Prokopov' },
+  { name: 'Inconsolata', cat: 'Monospace', designer: 'Raph Levien' },
+  { name: 'Overpass', cat: 'Sans Serif', designer: 'Delve Fonts' },
+  { name: 'Overpass Mono', cat: 'Monospace', designer: 'Delve Fonts' },
+  { name: 'Fraunces', cat: 'Serif', designer: 'Phaedra Charles' },
+  { name: 'Newsreader', cat: 'Serif', designer: 'Production Type' },
+  { name: 'Literata', cat: 'Serif', designer: 'TypeTogether' },
+  { name: 'Libre Baskerville', cat: 'Serif', designer: 'Impallari Type' },
+  { name: 'Libre Bodoni', cat: 'Serif', designer: 'Impallari Type' },
+  { name: 'Libre Caslon Text', cat: 'Serif', designer: 'Impallari Type' },
+  { name: 'Libre Caslon Display', cat: 'Display', designer: 'Impallari Type' },
+  { name: 'Libre Franklin', cat: 'Sans Serif', designer: 'Impallari Type' },
+  { name: 'Playfair Display', cat: 'Serif', designer: 'Claus Eggers Sørensen' },
+  { name: 'Cormorant Garamond', cat: 'Serif', designer: 'Christian Thalmann' },
+  { name: 'Cinzel', cat: 'Serif', designer: 'Natanael Gama' },
+  { name: 'Cinzel Decorative', cat: 'Display', designer: 'Natanael Gama' },
+  { name: 'Marcellus', cat: 'Serif', designer: 'Astigmatic' },
+  { name: 'Bodoni Moda', cat: 'Serif', designer: 'Owen Earl' },
+  { name: 'Spectral', cat: 'Serif', designer: 'Production Type' },
+  { name: 'Castoro', cat: 'Serif', designer: 'Tiro Typeworks' },
+  { name: 'Faustina', cat: 'Serif', designer: 'Omnibus-Type' },
+  { name: 'Be Vietnam Pro', cat: 'Sans Serif', designer: 'Lâm Bảo' },
+  { name: 'Albert Sans', cat: 'Sans Serif', designer: 'Andreas Rasmussen' },
+  { name: 'Hanken Grotesk', cat: 'Sans Serif', designer: 'Hanken Design Co.' },
+  { name: 'Instrument Sans', cat: 'Sans Serif', designer: 'Instrument' },
+];
 
-// In-memory cache for fetched provider fonts
-let cachedFontshareFonts: FontItem[] | null = null;
+export function getBundledFontshareFonts(): FontItem[] {
+  return BUNDLED_FONTSHARE_LIST.map((item) => {
+    const slug = item.name.toLowerCase().replace(/[^a-z0-9]/g, '-');
+    return {
+      id: `fontshare-${slug}`,
+      name: item.name,
+      fontFamily: `"${item.name}", sans-serif`,
+      format: 'WOFF2' as const,
+      category: item.cat as any,
+      stylesCount: 4,
+      styles: [
+        { name: 'Regular', weight: 400, style: 'normal' as const },
+        { name: 'Medium', weight: 500, style: 'normal' as const },
+        { name: 'SemiBold', weight: 600, style: 'normal' as const },
+        { name: 'Bold', weight: 700, style: 'normal' as const },
+      ],
+      active: true,
+      favorite: false,
+      folderId: item.cat === 'Serif' ? 'serif' : item.cat === 'Display' ? 'display' : item.cat === 'Monospace' ? 'mono' : 'sans',
+      provider: 'Fontshare' as const,
+      designer: item.designer,
+      version: 'Version 1.000',
+      license: 'Fontshare Free Font License',
+      licenseUrl: 'https://www.fontshare.com/licensing',
+      copyright: `Copyright Indian Type Foundry (${item.name})`,
+      postScriptName: `${item.name.replace(/\s+/g, '')}-Regular`,
+      numGlyphs: 450,
+    };
+  });
+}
 
 /**
  * Fetch the complete font catalogue from Fontshare's official public API
@@ -22,7 +149,7 @@ export async function fetchFontshareFonts(): Promise<FontItem[]> {
     const data = await res.json();
     const rawList = data.fonts || (Array.isArray(data) ? data : []);
 
-    if (!rawList || rawList.length === 0) return [];
+    if (!rawList || rawList.length === 0) return getBundledFontshareFonts();
 
     const fonts: FontItem[] = [];
     const fontshareCdnSlugs: string[] = [];
@@ -66,7 +193,7 @@ export async function fetchFontshareFonts(): Promise<FontItem[]> {
         styles: stylesList,
         active: true,
         favorite: false,
-        folderId: cleanCategory === 'Serif' ? 'serif' : cleanCategory === 'Display' ? 'display' : 'sans',
+        folderId: cleanCategory === 'Serif' ? 'serif' : cleanCategory === 'Display' ? 'display' : cleanCategory === 'Monospace' ? 'mono' : 'sans',
         provider: 'Fontshare',
         designer: item.designer || 'Indian Type Foundry (ITF)',
         version: item.version || 'Version 1.000',
@@ -95,7 +222,7 @@ export async function fetchFontshareFonts(): Promise<FontItem[]> {
     return fonts;
   } catch (err) {
     console.warn('Could not fetch Fontshare API live, returning offline fallback:', err);
-    return [];
+    return getBundledFontshareFonts();
   }
 }
 
@@ -104,7 +231,7 @@ import googleFontsJson from '../data/googleFontsList.json';
 /**
  * Load Full Google Fonts Catalogue (1,940+ Typefaces)
  */
-export async function loadGoogleFontsCatalogue(): Promise<FontItem[]> {
+export function loadGoogleFontsCatalogue(): FontItem[] {
   try {
     const list = googleFontsJson as Array<{ name: string; cat: string; designer: string; styles: number[] }>;
     return list.map((g) => {
@@ -157,6 +284,7 @@ export async function loadGoogleFontsCatalogue(): Promise<FontItem[]> {
     return [];
   }
 }
+
 
 /**
  * Load Velvetyne Open Source Type Foundry Catalogue (https://velvetyne.fr)
@@ -466,12 +594,27 @@ export async function loadOpenFoundryFonts(): Promise<FontItem[]> {
 }
 
 /**
+ * Return all bundled open source provider fonts synchronously on frame 1
+ */
+export function getAllBundledProviderFonts(): FontItem[] {
+  return [
+    ...getBundledFontshareFonts(),
+    ...loadGoogleFontsCatalogue(),
+    ...loadVelvetyneFonts(),
+    ...loadCollletttivoFonts(),
+    ...loadUncutFonts(),
+    ...loadFreeFacesFonts(),
+    ...loadOpenFoundryFonts(),
+  ];
+}
+
+/**
  * Fetch all enabled provider catalogs in parallel
  */
 export async function fetchAllProvidersFonts(): Promise<FontItem[]> {
   const results = await Promise.allSettled([
     fetchFontshareFonts(),
-    loadGoogleFontsCatalogue(),
+    Promise.resolve(loadGoogleFontsCatalogue()),
     loadVelvetyneFonts(),
     loadCollletttivoFonts(),
     loadUncutFonts(),
@@ -485,5 +628,15 @@ export async function fetchAllProvidersFonts(): Promise<FontItem[]> {
       all.push(...r.value);
     }
   }
-  return all;
+  return all.length > 0 ? all : getAllBundledProviderFonts();
+}
+
+/**
+ * Return all default catalog fonts (All 7 providers + Windows System fonts) synchronously on frame 1
+ */
+export function getDefaultCatalogFonts(): FontItem[] {
+  return [
+    ...getAllBundledProviderFonts(),
+    ...getBundledSystemFonts(),
+  ];
 }

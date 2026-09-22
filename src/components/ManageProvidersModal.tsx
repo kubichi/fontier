@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, ExternalLink, Check, Plus, Globe } from 'lucide-react';
+import { X, ExternalLink, Check, Plus, Globe, RefreshCw } from 'lucide-react';
 import { AVAILABLE_PROVIDERS } from '../data/providersData';
 
 interface ManageProvidersModalProps {
@@ -7,6 +7,7 @@ interface ManageProvidersModalProps {
   onClose: () => void;
   enabledProviders: string[];
   onToggleProvider: (providerId: string) => void;
+  onSyncCatalogs?: () => void;
   theme?: 'dark' | 'light';
   counts?: Record<string, number>;
 }
@@ -16,6 +17,7 @@ export const ManageProvidersModal: React.FC<ManageProvidersModalProps> = ({
   onClose,
   enabledProviders,
   onToggleProvider,
+  onSyncCatalogs,
   theme = 'dark',
   counts = {},
 }) => {
@@ -143,9 +145,24 @@ export const ManageProvidersModal: React.FC<ManageProvidersModalProps> = ({
             isLight ? 'bg-[#f8fafc] border-[#e2e8f0]' : 'bg-[#181818] border-[#2a2a2a]'
           }`}
         >
-          <span className="text-[11px] text-neutral-400">
-            {enabledProviders.length} active provider{enabledProviders.length === 1 ? '' : 's'}
-          </span>
+          <div className="flex items-center space-x-3">
+            <span className="text-[11px] text-neutral-400">
+              {enabledProviders.length} active provider{enabledProviders.length === 1 ? '' : 's'}
+            </span>
+            {onSyncCatalogs && (
+              <button
+                onClick={onSyncCatalogs}
+                className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium border transition-colors ${
+                  isLight
+                    ? 'border-[#cbd5e1] hover:bg-[#e2e8f0] text-[#334155]'
+                    : 'border-[#333333] hover:bg-[#282828] text-[#cccccc]'
+                }`}
+              >
+                <RefreshCw className="w-3 h-3 text-accent" />
+                <span>Sync / Download Catalogs</span>
+              </button>
+            )}
+          </div>
           <button
             onClick={onClose}
             className="px-4 py-1.5 rounded-md bg-accent text-white font-medium hover:opacity-90 transition-opacity"

@@ -64,6 +64,7 @@ interface SidebarProps {
   };
   enabledProviders?: string[];
   onToggleProvider?: (providerId: string) => void;
+  onSyncCatalogs?: () => void;
   onOpenAddModal: () => void;
   onOpenLocalFolder: () => void;
   onOpenSettings?: () => void;
@@ -88,6 +89,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   counts,
   enabledProviders: propEnabledProviders,
   onToggleProvider: propOnToggleProvider,
+  onSyncCatalogs,
   onOpenAddModal,
   onOpenLocalFolder,
   onOpenSettings,
@@ -510,20 +512,36 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <span>Providers</span>
                 </button>
 
-                <button
-                  onClick={() => {
-                    if (onOpenManageProviders) onOpenManageProviders();
-                    else setIsManageProvidersOpen(true);
-                  }}
-                  className={`transition-colors p-0.5 rounded ${
-                    isLight
-                      ? 'text-[#64748b] hover:text-[#0f172a] hover:bg-slate-200'
-                      : 'text-[#888888] hover:text-white hover:bg-neutral-800'
-                  }`}
-                  title="Manage font providers and foundries"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                </button>
+                <div className="flex items-center space-x-1">
+                  {onSyncCatalogs && (
+                    <button
+                      onClick={onSyncCatalogs}
+                      className={`transition-colors p-0.5 rounded ${
+                        isLight
+                          ? 'text-[#64748b] hover:text-[#0f172a] hover:bg-slate-200'
+                          : 'text-[#888888] hover:text-white hover:bg-neutral-800'
+                      }`}
+                      title="Sync & refresh online font catalogues"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                    </button>
+                  )}
+
+                  <button
+                    onClick={() => {
+                      if (onOpenManageProviders) onOpenManageProviders();
+                      else setIsManageProvidersOpen(true);
+                    }}
+                    className={`transition-colors p-0.5 rounded ${
+                      isLight
+                        ? 'text-[#64748b] hover:text-[#0f172a] hover:bg-slate-200'
+                        : 'text-[#888888] hover:text-white hover:bg-neutral-800'
+                    }`}
+                    title="Manage font providers and foundries"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
 
               {providersOpen && (

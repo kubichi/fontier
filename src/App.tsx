@@ -17,7 +17,7 @@ import { autoTagFontMetadata } from './utils/autoTagger';
 import { detectWindowsSystemFonts } from './utils/systemFonts';
 import { rehydrateAllStoredFonts } from './utils/fontStorage';
 import { scanDroppedItems, scanDirectoryHandle, scanDirectoryHandleWithPaths, ScannedFontFile } from './utils/fileScanner';
-import { fetchAllProvidersFonts } from './utils/providerFonts';
+import { fetchAllProvidersFonts, getDefaultCatalogFonts } from './utils/providerFonts';
 
 import { Folder, Search, Plus, HardDrive, RefreshCw, X, Check } from 'lucide-react';
 
@@ -37,13 +37,36 @@ const DEFAULT_SETTINGS: AppSettings = {
 };
 
 export default function App() {
-  // Load local user-imported fonts from localStorage or empty array (provider fonts are fetched live)
+  // Load full default catalog (Google 1940+, Fontshare 98, UNCUT 58, Velvetyne, etc. + System fonts) + local user fonts + overrides
   const [fonts, setFonts] = useState<FontItem[]>(() => {
+    const defaultCatalog = getDefaultCatalogFonts();
+
+    // Read stored user overrides (favorites, active status, folder assignments)
+    let overrides: Record<string, { active?: boolean; favorite?: boolean; folderId?: string }> = {};
+    try {
+      const raw = localStorage.getItem('fontbase_font_overrides');
+      if (raw) overrides = JSON.parse(raw);
+    } catch {}
+
+    const catalogWithOverrides = defaultCatalog.map((f) => {
+      const o = overrides[f.id];
+      if (o) {
+        return {
+          ...f,
+          active: o.active !== undefined ? o.active : f.active,
+          favorite: o.favorite !== undefined ? o.favorite : f.favorite,
+          folderId: o.folderId || f.folderId,
+        };
+      }
+      return f;
+    });
+
+    let localFonts: FontItem[] = [];
     try {
       const saved = localStorage.getItem('fontbase_local_fonts') || localStorage.getItem('fontbase_fonts');
       if (saved) {
         const parsed: FontItem[] = JSON.parse(saved);
-        return parsed
+        localFonts = parsed
           .filter((f) => {
             if (f.provider !== 'Local') return false;
             if (f.name && (f.name.startsWith('._') || f.name.startsWith('.'))) return false;
@@ -67,7 +90,11 @@ export default function App() {
     } catch (e) {
       console.error(e);
     }
-    return [];
+
+    const localNames = new Set(localFonts.map((f) => f.name.toLowerCase()));
+    const nonConflictingCatalog = catalogWithOverrides.filter((f) => !localNames.has(f.name.toLowerCase()));
+
+    return [...localFonts, ...nonConflictingCatalog];
   });
 
 
@@ -228,8 +255,8 @@ export default function App() {
       });
 
       setFonts((prev) => {
-        const existingNames = new Set(prev.map((f) => f.name.toLowerCase()));
-        const uniqueSys = appliedSysFonts.filter((f) => !existingNames.has(f.name.toLowerCase()));
+        const existingIds = new Set(prev.map((f) => f.id));
+        const uniqueSys = appliedSysFonts.filter((f) => !existingIds.has(f.id));
         if (uniqueSys.length === 0) return prev;
         return [...prev, ...uniqueSys];
       });
@@ -448,27 +475,68 @@ export default function App() {
     setCurrentFilter('all');
     setEnabledProviders(['google', 'fontshare', 'openfoundry', 'freefaces', 'uncut', 'velvetyne', 'collletttivo']);
 
-    // Fetch and reload all 2,120+ provider fonts fresh!
-    try {
-      const freshProviders = await fetchAllProvidersFonts();
-      setFonts(freshProviders);
-    } catch (e) {
-      console.error('Reset font fetch error:', e);
-    }
+    // Instantly reset to all default 2,120+ provider fonts & system fonts
+    const defaultFonts = getDefaultCatalogFonts();
+    setFonts(defaultFonts);
 
-    // Re-detect system fonts
+    // Re-detect system fonts and re-verify
     detectWindowsSystemFonts().then((sysFonts) => {
       if (sysFonts.length > 0) {
         setFonts((prev) => {
-          const existingNames = new Set(prev.map((f) => f.name.toLowerCase()));
-          const uniqueSys = sysFonts.filter((f) => !existingNames.has(f.name.toLowerCase()));
+          const existingIds = new Set(prev.map((f) => f.id));
+          const uniqueSys = sysFonts.filter((f) => !existingIds.has(f.id));
+          if (uniqueSys.length === 0) return prev;
           return [...prev, ...uniqueSys];
         });
       }
     });
 
-    setNotification('Factory reset complete. All catalogs and settings restored.');
+    setNotification('Factory reset complete. Restored 2,120+ fonts across all providers and system fonts.');
     setTimeout(() => setNotification(null), 3500);
+  };
+
+  // Live Sync / Download latest provider catalogues on-demand
+  const handleSyncProviderCatalogs = async () => {
+    setIsScanning(true);
+    setNotification('Syncing latest font catalogues from all providers...');
+    try {
+      const fresh = await fetchAllProvidersFonts();
+
+      let overrides: Record<string, { active?: boolean; favorite?: boolean; folderId?: string }> = {};
+      try {
+        const raw = localStorage.getItem('fontbase_font_overrides');
+        if (raw) overrides = JSON.parse(raw);
+      } catch {}
+
+      const appliedFresh = fresh.map((f) => {
+        const o = overrides[f.id];
+        if (o) {
+          return {
+            ...f,
+            active: o.active !== undefined ? o.active : f.active,
+            favorite: o.favorite !== undefined ? o.favorite : f.favorite,
+            folderId: o.folderId || f.folderId,
+          };
+        }
+        return f;
+      });
+
+      setFonts((prev) => {
+        const nonProvider = prev.filter((f) => f.provider === 'Local' || f.provider === 'System');
+        const existingIds = new Set(nonProvider.map((f) => f.id));
+        const unique = appliedFresh.filter((f) => !existingIds.has(f.id));
+        return [...nonProvider, ...unique];
+      });
+
+      setNotification(`Synchronized ${fresh.length} fonts across all 7 online providers!`);
+      setTimeout(() => setNotification(null), 4000);
+    } catch (err) {
+      console.error(err);
+      setNotification('Could not reach some provider APIs. Offline rosters are active.');
+      setTimeout(() => setNotification(null), 4000);
+    } finally {
+      setIsScanning(false);
+    }
   };
 
   const handleUpdateFilters = (updates: Partial<FontFilters>) => {
@@ -1454,6 +1522,7 @@ export default function App() {
           counts={counts}
           enabledProviders={enabledProviders}
           onToggleProvider={handleToggleProvider}
+          onSyncCatalogs={handleSyncProviderCatalogs}
           onOpenManageProviders={() => setIsManageProvidersOpen(true)}
           onOpenAddModal={() => setIsAddModalOpen(true)}
           onOpenLocalFolder={handleOpenLocalFolder}
@@ -1750,6 +1819,7 @@ export default function App() {
         onClose={() => setIsManageProvidersOpen(false)}
         enabledProviders={enabledProviders}
         onToggleProvider={handleToggleProvider}
+        onSyncCatalogs={handleSyncProviderCatalogs}
         counts={counts.byProvider}
         theme={currentTheme}
       />
