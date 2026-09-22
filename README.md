@@ -1,7 +1,6 @@
 # Fontier 
 
-> **Modern Desktop Font Manager & Typography Studio.**  
-> A lightning-fast, open-source desktop font organizer, viewer, and kerning studio.
+> **Modern Font manager and organizer.**  
 
 <div align="center">
 
@@ -38,7 +37,7 @@
 
 ## Key Features
 
-- **Blazing-Fast Virtualized Rendering & Memory Management**
+- **Fast Virtualized Rendering & Memory Management**
   - High-performance virtual windowed rendering renders only visible fonts in the viewport.
   - Integrated LRU FontFace memory cache prevents browser memory bloat when scrolling through thousands of fonts.
 - **Built-in Open-Source Type Providers & Catalogs**
@@ -65,7 +64,7 @@
   - Live preview text customization with built-in pangram presets.
   - Dual canvas color picker with custom text and background styling (Classic, Dark, Monokai, Nordic Slate, OLED Black, etc.).
   - Adjustable font size, alignment, and row density (comfortable / compact).
-- **Deep Typeface Inspector & Glyph Viewer**
+- **Typeface Inspector & Glyph Viewer**
   - Interactive glyph tables, Unicode code points, categories, and character sets.
   - Full OpenType metadata: designer info, postscript names, units per em, licensing, and file path.
 
