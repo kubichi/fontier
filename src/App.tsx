@@ -1801,6 +1801,7 @@ export default function App() {
         folders={folders}
         onAddCustomFont={handleAddCustomFont}
         onAddCustomFonts={handleAddCustomFonts}
+        onImportWithSubfolders={importFontsWithSubfolders}
         onCreateFolder={handleCreateFolder}
       />
 

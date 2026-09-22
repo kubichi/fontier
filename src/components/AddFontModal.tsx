@@ -3,7 +3,7 @@ import { X, Upload, FolderPlus, Folder, CheckCircle2, AlertCircle, HardDrive } f
 import { FolderItem, FontItem, FontCategory } from '../types';
 import { parseFontFile, parseFontBuffer } from '../utils/fontParser';
 import { autoTagFontMetadata } from '../utils/autoTagger';
-import { scanDroppedItems, scanDirectoryHandle } from '../utils/fileScanner';
+import { scanDroppedItems, scanDirectoryHandle, ScannedFontFile } from '../utils/fileScanner';
 
 interface AddFontModalProps {
   isOpen: boolean;
@@ -11,6 +11,7 @@ interface AddFontModalProps {
   folders: FolderItem[];
   onAddCustomFont: (font: FontItem) => void;
   onAddCustomFonts?: (fonts: FontItem[]) => void;
+  onImportWithSubfolders?: (scanned: ScannedFontFile[], rootLabel: string, rootFolderPath?: string) => Promise<void>;
   onCreateFolder: (name: string) => string;
 }
 
@@ -20,6 +21,7 @@ export const AddFontModal: React.FC<AddFontModalProps> = ({
   folders,
   onAddCustomFont,
   onAddCustomFonts,
+  onImportWithSubfolders,
   onCreateFolder,
 }) => {
   const [activeTab, setActiveTab] = useState<'font' | 'folder'>('font');
@@ -147,13 +149,51 @@ export const AddFontModal: React.FC<AddFontModalProps> = ({
         setProcessProgress('Scanning directory and subfolders...');
         const res = await (window as any).electronAPI.selectDirectory();
         if (res && res.files && res.files.length > 0) {
+          const rootLabel = res.folderName || 'Local Fonts';
+          const rootPath = (res.folderPath || '').replace(/\\/g, '/').replace(/\/$/, '');
+
+          if (onImportWithSubfolders) {
+            const scanned: ScannedFontFile[] = res.files.map((f: any) => {
+              const absPath = (f.path || f.name).replace(/\\/g, '/');
+              let relPath = f.relativePath || (
+                absPath.startsWith(rootPath)
+                  ? absPath.slice(rootPath.length).replace(/^\//, '')
+                  : f.name
+              );
+              return {
+                file: {
+                  name: f.name,
+                  size: f.size,
+                  path: f.path,
+                  arrayBuffer: async () => {
+                    if (typeof (window as any).electronAPI?.readFontFile === 'function') {
+                      return await (window as any).electronAPI.readFontFile(f.path);
+                    }
+                    return new ArrayBuffer(0);
+                  },
+                },
+                relativePath: relPath,
+                fullPath: f.path,
+              };
+            });
+            onClose();
+            await onImportWithSubfolders(scanned, rootLabel, res.folderPath);
+            return;
+          }
+
           const parsedList: FontItem[] = [];
           for (let i = 0; i < res.files.length; i++) {
             const f = res.files[i];
             try {
-              const item = await parseFontBuffer(f.name, f.buffer, selectedFolderId || undefined, f.size);
-              item.filePath = f.path;
-              parsedList.push(item);
+              let buf = f.buffer;
+              if (!buf && f.path && typeof (window as any).electronAPI?.readFontFile === 'function') {
+                buf = await (window as any).electronAPI.readFontFile(f.path);
+              }
+              if (buf) {
+                const item = await parseFontBuffer(f.name, buf, selectedFolderId || undefined, f.size, f.path);
+                item.filePath = f.path;
+                parsedList.push(item);
+              }
             } catch (err) {
               console.warn(`Could not parse ${f.name}:`, err);
             }
@@ -165,10 +205,15 @@ export const AddFontModal: React.FC<AddFontModalProps> = ({
               parsedList.forEach((font) => onAddCustomFont(font));
             }
             onClose();
+          } else {
+            setStatusMessage({ type: 'error', text: 'No valid font files found in the selected folder.' });
           }
+        } else if (res && (!res.files || res.files.length === 0)) {
+          setStatusMessage({ type: 'error', text: 'No font files (.ttf, .otf, .woff, .woff2) found in folder.' });
         }
       } catch (err) {
         console.warn('Electron folder selection error:', err);
+        setStatusMessage({ type: 'error', text: 'Failed to open directory.' });
       } finally {
         setIsProcessing(false);
         setProcessProgress('');

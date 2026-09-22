@@ -47,14 +47,26 @@ function buildSafeFamilyName(rawFamily: string): string {
 
 export async function parseFontBuffer(
   fileName: string,
-  buffer: ArrayBuffer,
+  buffer: ArrayBuffer | Uint8Array,
   folderId?: string,
   fileSize?: number,
   filePath?: string,
   skipImmediateRegister?: boolean
 ): Promise<FontItem> {
   const ext = (fileName.split('.').pop()?.toUpperCase() || 'TTF') as FontFormat;
-  const arrayBuffer = buffer;
+  if (!buffer) {
+    throw new Error('Empty font buffer provided');
+  }
+
+  let arrayBuffer: ArrayBuffer;
+  if ((buffer as any).buffer && (buffer as any).byteOffset !== undefined && (buffer as any).byteLength !== undefined) {
+    const u8 = buffer as unknown as Uint8Array;
+    arrayBuffer = u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength) as ArrayBuffer;
+  } else if (buffer instanceof ArrayBuffer) {
+    arrayBuffer = buffer;
+  } else {
+    arrayBuffer = new Uint8Array(buffer as any).buffer as ArrayBuffer;
+  }
 
   const fileBaseName = fileName.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
   let fontName = fileBaseName;
