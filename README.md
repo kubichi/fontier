@@ -26,7 +26,7 @@
 
 ## Features
 
-- **Performance Isn't As Bad As Other Electron Apps. I think.**
+- **Performance isn't as bad as other Electron Apps. I think.**
   - Virtual windowed rendering renders only visible fonts in the viewport.
 - **Hierarchical Subfolder Tree**
   - Mirror exact directory structures on import (e.g. `fonts/editorial/serif/...`).
