@@ -2,7 +2,7 @@
   "name": "fontier",
   "productName": "Fontier",
   "private": true,
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Fontier",
   "type": "module",
   "main": "electron/main.cjs",
