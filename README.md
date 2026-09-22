@@ -1,9 +1,7 @@
 # Fontier 
 
-> **Modern Font manager.**  
-> A lightweight, open-source desktop font organizer and viewer.
-
-![Fontier Banner](public/fontier_icon.png)
+> **Modern Desktop Font Manager & Typography Studio.**  
+> A lightning-fast, open-source desktop font organizer, viewer, and kerning studio.
 
 <div align="center">
 
@@ -18,37 +16,58 @@
 
 ---
 
+## Showcase
+
 <p align="center">
-  <img src="public/showcase.png" alt="Fontier Interface Showcase" width="100%" />
+  <img src="public/screenshot-list.png" alt="Fontier Font Library List View" width="100%" />
+</p>
+
+<p align="center">
+  <img src="public/screenshot-grid.png" alt="Fontier Specimen Grid Cards View" width="100%" />
+</p>
+
+<p align="center">
+  <img src="public/screenshot-wordmark.png" alt="Fontier Wordmark Kerning & Tracking Studio" width="100%" />
+</p>
+
+<p align="center">
+  <img src="public/screenshot-theme.png" alt="Fontier Custom Canvas Themes & Color Palettes" width="100%" />
 </p>
 
 ---
 
-## Features
+## Key Features
 
-- **Performance isn't as bad as other Electron Apps. I think.**
-  - Virtual windowed rendering renders only visible fonts in the viewport.
-- **Hierarchical Subfolder Tree**
-  - Mirror exact directory structures on import (e.g. `fonts/editorial/serif/...`).
-  - Expand and collapse folders with persistent state.
-- **Resizable Navigation Panel ("Scaler")**
-  - Smoothly drag to scale the sidebar width from **180px up to 800px** to give long folder names ample room.
-  - Double-click the grab handle anytime to instantly reset to the standard 260px width.
-- **Multi-Select & Bulk Folder Management**
-  - **Selection Mode**: Click `Select` in the Folders section header to bulk check folders.
-  - **Recursive Selection**: Clicking a parent folder's checkbox toggles the parent and all nested subfolders.
-  - **Quick Shortcuts**: Hold `Shift` or `Ctrl` while clicking any folder row to enter selection mode on the fly.
-  - **Safe Remove**: "Remove from Fontier" hides folders from the library while keeping local hard drive files 100% untouched.
-  - **OS Trash / Recycle Bin**: "Delete from Device" safely moves folders directly to your operating system's Recycle Bin with full confirmation.
+- **Blazing-Fast Virtualized Rendering & Memory Management**
+  - High-performance virtual windowed rendering renders only visible fonts in the viewport.
+  - Integrated LRU FontFace memory cache prevents browser memory bloat when scrolling through thousands of fonts.
+- **Built-in Open-Source Type Providers & Catalogs**
+  - **Google Fonts**: Instant access to 1,940+ curated typefaces with lazy-loaded webfont previews.
+  - **Fontshare**: Curated modern typography from the Indian Type Foundry (ITF).
+  - **UNCUT**: Contemporary libre typography catalog (including *Saint*, *Uncut Sans*, *Geist Mono*, etc.).
+  - **Velvetyne, Collletttivo, Free Faces & Open Foundry**: Direct integration with leading open-source type foundries.
+  - **Local & System Fonts**: Seamless native scanning of installed Windows/macOS/Linux system fonts.
+- **Wordmark Studio & Kerning Laboratory**
+  - Interactive letter-by-letter kerning with fine-grained position sliders and numeric inputs.
+  - Multi-letter distance measurement and visual guide overlays.
+  - Full keyboard shortcuts (Arrow keys for step kerning, Shift + Arrow for 5px increments).
+  - Global tracking adjustments and quick logo/word presets.
+  - Copy SVG or PNG paths directly to clipboard for Figma/Illustrator workflows.
+- **Hierarchical Subfolder Tree & Library Organization**
+  - Mirror exact directory structures on import (e.g., `fonts/editorial/serif/...`).
+  - Expand/collapse folders with persistent state and custom folder colors.
+  - **Resizable Navigation Panel ("Scaler")**: Drag to adjust the sidebar width from **180px up to 800px** with double-click auto-reset.
+- **Multi-Select & Bulk Management**
+  - **Selection Mode**: Bulk check and manage folders with recursive child toggling.
+  - **Safe Remove**: Hide folders from the library while keeping local hard drive files 100% untouched.
+  - **OS Trash / Recycle Bin**: Safely move unwanted folders directly to the OS Recycle Bin with confirmation.
 - **Real-Time Canvas Customization**
   - Live preview text customization with built-in pangram presets.
-  - Adjustable font size, alignment (left, center, right), and row density (comfortable / compact).
-  - Dual canvas color picker with curated high-contrast palettes (Classic, Dark, Monokai, Nordic Slate, OLED Black, etc.).
+  - Dual canvas color picker with custom text and background styling (Classic, Dark, Monokai, Nordic Slate, OLED Black, etc.).
+  - Adjustable font size, alignment, and row density (comfortable / compact).
 - **Deep Typeface Inspector & Glyph Viewer**
-  - Interactive glyph tables, Unicode code points, and character sets.
-  - OpenType metadata: designer info, postscript names, units per em, licensing, and file path.
-- **Native Windows System Font Detection**
-  - Automatically indexes all installed Windows system fonts grouped by typeface family.
+  - Interactive glyph tables, Unicode code points, categories, and character sets.
+  - Full OpenType metadata: designer info, postscript names, units per em, licensing, and file path.
 
 ---
 
@@ -89,7 +108,7 @@ npm run electron:build
 
 The output binaries will be created in the `release/` directory:
 - `release/win-unpacked/Fontier.exe` (Standalone portable executable)
-- `release/Fontier Setup 1.0.0.exe` (Windows NSIS installer)
+- `release/Fontier Setup 1.2.1.exe` (Windows NSIS installer)
 
 ---
 
@@ -101,8 +120,6 @@ The output binaries will be created in the `release/` directory:
 - **Styling**: [Tailwind CSS](https://tailwindcss.com/)
 - **Font Parsing**: [opentype.js](https://opentype.js.org/)
 - **Icons**: [Lucide React](https://lucide.dev/)
-
-
 
 ---
 
