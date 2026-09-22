@@ -1600,26 +1600,7 @@ export const FontDetailPage: React.FC<FontDetailPageProps> = ({
                 </div>
               )}
 
-              {/* Shift Selected Span Dashed Line with Distance Badge */}
-              {shiftSelectedLetterIdx !== null && selectedLetterIdx !== null && shiftSelectedLetterIdx !== selectedLetterIdx && (
-                <div className="w-full max-w-lg flex items-center justify-center space-x-2 mb-4 animate-in fade-in duration-150 z-20 pointer-events-none">
-                  <div className="flex-1 border-b-2 border-dashed border-accent opacity-80" />
-                  <span className="px-3 py-1 rounded-full bg-accent text-white font-mono text-xs font-bold shadow-md whitespace-nowrap">
-                    {(() => {
-                      const min = Math.min(selectedLetterIdx, shiftSelectedLetterIdx);
-                      const max = Math.max(selectedLetterIdx, shiftSelectedLetterIdx);
-                      let totalSpacing = 0;
-                      for (let i = min + 1; i <= max; i++) {
-                        totalSpacing += globalTracking + (kernOffsets[i] || 0);
-                      }
-                      return `- - - ${totalSpacing}px (${kernWord[min]} ↔ ${kernWord[max]}) - - -`;
-                    })()}
-                  </span>
-                  <div className="flex-1 border-b-2 border-dashed border-accent opacity-80" />
-                </div>
-              )}
-
-              {/* Characters container with interactive kerning handles & selective dimension markers */}
+              {/* Characters container with interactive kerning handles & in-between dimension lines */}
               <div className="flex items-center justify-center relative z-10 py-6 px-4" style={{ overflow: 'visible' }}>
                 {Array.from(kernWord).map((char, index) => {
                   const offset = kernOffsets[index] || 0;
@@ -1627,85 +1608,96 @@ export const FontDetailPage: React.FC<FontDetailPageProps> = ({
                   const isShiftSelected = shiftSelectedLetterIdx === index;
                   const isWithinSpan =
                     shiftSelectedLetterIdx !== null &&
-                    index >= Math.min(selectedLetterIdx, shiftSelectedLetterIdx) &&
+                    index > Math.min(selectedLetterIdx, shiftSelectedLetterIdx) &&
                     index <= Math.max(selectedLetterIdx, shiftSelectedLetterIdx);
 
                   const isDraggingThis = dragState?.index === index;
                   const spacingPx = index > 0 ? globalTracking + offset : 0;
                   const showLeftDistance = selectedLetterIdx !== null && selectedLetterIdx === index && index > 0 && shiftSelectedLetterIdx === null;
-                  const showRightDistance = selectedLetterIdx !== null && selectedLetterIdx === index - 1 && index > 0 && shiftSelectedLetterIdx === null;
 
                   return (
-                    <div
-                      key={`kern-item-${index}-${char}`}
-                      className="relative flex flex-col items-center group cursor-grab active:cursor-grabbing select-none"
-                      style={{
-                        marginLeft: index > 0 ? `${spacingPx}px` : 0,
-                        zIndex: isDraggingThis ? 40 : isSelected ? 30 : 10,
-                      }}
-                      onMouseDown={(e) => handleLetterMouseDown(index, e)}
-                    >
-                      {/* Selective Distance Indicator Badge (ONLY shown for adjacent neighbor of selected letter) */}
-                      {(showLeftDistance || showRightDistance) && (
-                        <div className="absolute -top-7 left-0 transform -translate-x-1/2 pointer-events-none z-50 animate-in fade-in zoom-in-95 duration-100">
-                          <div className="bg-accent text-white font-mono text-[9px] px-1.5 py-0.5 rounded shadow-lg flex items-center space-x-1 whitespace-nowrap">
-                            <span>{kernWord[index - 1]} ↔ {char}:</span>
-                            <span className="font-bold">{spacingPx > 0 ? `+${spacingPx}` : spacingPx}px</span>
-                          </div>
+                    <React.Fragment key={`kern-frag-${index}-${char}`}>
+                      {/* Spacing / Distance Indicator Line directly IN BETWEEN letters */}
+                      {index > 0 && (
+                        <div
+                          className="flex items-center justify-center relative select-none shrink-0"
+                          style={{
+                            width: `${Math.max(14, spacingPx)}px`,
+                            minWidth: `${Math.max(14, spacingPx)}px`,
+                            height: `${kernFontSize}px`,
+                          }}
+                        >
+                          {(showLeftDistance || isWithinSpan) ? (
+                            <div className="w-full flex items-center justify-center relative px-0.5 z-20">
+                              <div className="w-full border-b-2 border-dashed border-accent opacity-90" />
+                              <span className="absolute px-1.5 py-0.5 bg-accent text-white font-mono text-[9px] font-bold rounded shadow-md whitespace-nowrap">
+                                {spacingPx}px
+                              </span>
+                            </div>
+                          ) : null}
                         </div>
                       )}
 
-                      {/* Character Offset Pill / Drag Handle above */}
+                      {/* Letter Glyph Container */}
                       <div
-                        className={`text-[9px] font-mono px-1.5 py-0.5 rounded mb-1 transition-all pointer-events-none ${
-                          isDraggingThis
-                            ? 'bg-accent text-white scale-110 shadow-md font-bold'
-                            : isSelected || isShiftSelected
-                            ? 'bg-accent text-white shadow-xs font-semibold'
-                            : isWithinSpan
-                            ? 'bg-accent/40 text-white'
-                            : offset !== 0
-                            ? 'bg-accent/20 text-accent'
-                            : 'opacity-0 group-hover:opacity-80 bg-[#333333] text-[#aaaaaa]'
-                        }`}
+                        className="relative flex flex-col items-center group cursor-grab active:cursor-grabbing select-none shrink-0"
+                        style={{
+                          zIndex: isDraggingThis ? 40 : isSelected ? 30 : 10,
+                        }}
+                        onMouseDown={(e) => handleLetterMouseDown(index, e)}
                       >
-                        {isDraggingThis ? `${offset > 0 ? `+${offset}` : offset}px` : (offset > 0 ? `+${offset}` : offset !== 0 ? `${offset}` : `${index + 1}`)}
-                      </div>
-
-                      {/* Letter Glyph Box */}
-                      <div
-                        className={`px-1 py-0.5 rounded-lg transition-all ${
-                          isDraggingThis
-                            ? 'ring-2 ring-accent bg-accent/25 shadow-lg'
-                            : isSelected || isShiftSelected
-                            ? 'ring-2 ring-accent bg-accent/15'
-                            : isWithinSpan
-                            ? 'ring-1 ring-accent/60 bg-accent/10'
-                            : 'hover:bg-white/5'
-                        }`}
-                      >
-                        <span
-                          style={{
-                            fontFamily: cleanFontFamily,
-                            color: wordmarkTextColor,
-                            fontWeight: selectedStyle.weight,
-                            fontStyle: selectedStyle.style,
-                            fontSize: `${kernFontSize}px`,
-                            lineHeight: 1,
-                            display: 'inline-block',
-                          }}
+                        {/* Character Offset Pill / Drag Handle above */}
+                        <div
+                          className={`text-[9px] font-mono px-1.5 py-0.5 rounded mb-1 transition-all pointer-events-none ${
+                            isDraggingThis
+                              ? 'bg-accent text-white scale-110 shadow-md font-bold'
+                              : isSelected || isShiftSelected
+                              ? 'bg-accent text-white shadow-xs font-semibold'
+                              : isWithinSpan
+                              ? 'bg-accent/40 text-white'
+                              : offset !== 0
+                              ? 'bg-accent/20 text-accent'
+                              : 'opacity-0 group-hover:opacity-80 bg-[#333333] text-[#aaaaaa]'
+                          }`}
                         >
-                          {char === ' ' ? '\u00A0' : char}
+                          {isDraggingThis ? `${offset > 0 ? `+${offset}` : offset}px` : (offset > 0 ? `+${offset}` : offset !== 0 ? `${offset}` : `${index + 1}`)}
+                        </div>
+
+                        {/* Letter Glyph Box */}
+                        <div
+                          className={`px-1 py-0.5 rounded-lg transition-all ${
+                            isDraggingThis
+                              ? 'ring-2 ring-accent bg-accent/25 shadow-lg'
+                              : isSelected || isShiftSelected
+                              ? 'ring-2 ring-accent bg-accent/15'
+                              : isWithinSpan
+                              ? 'ring-1 ring-accent/60 bg-accent/10'
+                              : 'hover:bg-white/5'
+                          }`}
+                        >
+                          <span
+                            style={{
+                              fontFamily: cleanFontFamily,
+                              color: wordmarkTextColor,
+                              fontWeight: selectedStyle.weight,
+                              fontStyle: selectedStyle.style,
+                              fontSize: `${kernFontSize}px`,
+                              lineHeight: 1,
+                              display: 'inline-block',
+                            }}
+                          >
+                            {char === ' ' ? '\u00A0' : char}
+                          </span>
+                        </div>
+
+                        {/* Sub-index indicator */}
+                        <span className={`text-[8px] font-mono mt-1 transition-opacity ${
+                          isSelected || isShiftSelected || isWithinSpan ? 'text-accent font-bold opacity-100' : 'text-[#666666] opacity-30'
+                        }`}>
+                          #{index + 1}
                         </span>
                       </div>
-
-                      {/* Sub-index indicator */}
-                      <span className={`text-[8px] font-mono mt-1 transition-opacity ${
-                        isSelected || isShiftSelected || isWithinSpan ? 'text-accent font-bold opacity-100' : 'text-[#666666] opacity-30'
-                      }`}>
-                        #{index + 1}
-                      </span>
-                    </div>
+                    </React.Fragment>
                   );
                 })}
               </div>

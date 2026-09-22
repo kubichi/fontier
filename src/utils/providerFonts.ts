@@ -267,8 +267,14 @@ export async function loadCollletttivoFonts(): Promise<FontItem[]> {
  */
 export async function loadUncutFonts(): Promise<FontItem[]> {
   const UNCUT_FONTS = [
+    { name: 'Saint', cat: 'Display', designer: 'Liza Dushnota' },
     { name: 'Uncut Sans', cat: 'Sans Serif', designer: 'Kasper Nordkvist' },
     { name: 'Uncut Serif', cat: 'Serif', designer: 'Kasper Nordkvist' },
+    { name: 'Gap Sans', cat: 'Display', designer: 'Alexandre Liziard' },
+    { name: 'Bertioga Sans', cat: 'Sans Serif', designer: 'Cristiano Sobral' },
+    { name: 'Hauora Sans', cat: 'Sans Serif', designer: 'Wayne Shih' },
+    { name: 'AUTHENTIC Sans', cat: 'Sans Serif', designer: 'Christina Janus & Desmond Wong' },
+    { name: 'Standard', cat: 'Sans Serif', designer: 'Bryce Wilner' },
     { name: 'Berlin Grotesk', cat: 'Sans Serif', designer: 'Christian Munk' },
     { name: 'Opening Hours Sans', cat: 'Sans Serif', designer: 'Marc Rouault' },
     { name: 'Hedvig Letters Sans', cat: 'Sans Serif', designer: 'Hedvig' },
