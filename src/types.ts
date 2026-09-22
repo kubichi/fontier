@@ -14,7 +14,7 @@ export type TextAlignment = 'left' | 'center' | 'right';
 
 export type ViewMode = 'list' | 'grid';
 
-export type DetailTab = 'styles' | 'glyphs' | 'waterfall' | 'details' | 'kern';
+export type DetailTab = 'styles' | 'glyphs' | 'waterfall' | 'details' | 'kern' | 'wordmark';
 
 export interface FontStyle {
   name: string;

@@ -1,6 +1,8 @@
 import { FontItem } from '../types';
 import { getBundledSystemFonts } from './systemFonts';
 
+let cachedFontshareFonts: FontItem[] | null = null;
+
 // Complete offline bundled roster of Fontshare fonts (98 typefaces)
 const BUNDLED_FONTSHARE_LIST = [
   { name: 'Satoshi', cat: 'Sans Serif', designer: 'Indian Type Foundry' },
@@ -181,7 +183,7 @@ export async function fetchFontshareFonts(): Promise<FontItem[]> {
           ? 'Monospace'
           : 'Sans Serif';
 
-      fontshareCdnSlugs.push(`${slug}@${stylesList.map((st) => st.weight).join(',')}`);
+      fontshareCdnSlugs.push(`${slug}@${stylesList.map((st: any) => st.weight).join(',')}`);
 
       fonts.push({
         id: `fontshare-${slug}`,
@@ -289,7 +291,7 @@ export function loadGoogleFontsCatalogue(): FontItem[] {
 /**
  * Load Velvetyne Open Source Type Foundry Catalogue (https://velvetyne.fr)
  */
-export async function loadVelvetyneFonts(): Promise<FontItem[]> {
+export function loadVelvetyneFonts(): FontItem[] {
   const VELVETYNE_FONTS = [
     { name: 'Axxent', cat: 'Display', designer: 'Frank Adebiaye' },
     { name: 'Millimetre', cat: 'Display', designer: 'Jérémy Landes' },
@@ -346,7 +348,7 @@ export async function loadVelvetyneFonts(): Promise<FontItem[]> {
 /**
  * Load Collletttivo Open Source Type Collective Catalogue (https://www.collletttivo.it)
  */
-export async function loadCollletttivoFonts(): Promise<FontItem[]> {
+export function loadCollletttivoFonts(): FontItem[] {
   const COLLLETTTIVO_FONTS = [
     { name: 'Mattone', cat: 'Sans Serif', designer: 'Collletttivo' },
     { name: 'Sintesi', cat: 'Sans Serif', designer: 'Collletttivo' },
@@ -393,7 +395,7 @@ export async function loadCollletttivoFonts(): Promise<FontItem[]> {
 /**
  * Load UNCUT Open-Source Contemporary Typography Catalogue (https://uncut.wtf - 50+ typefaces)
  */
-export async function loadUncutFonts(): Promise<FontItem[]> {
+export function loadUncutFonts(): FontItem[] {
   const UNCUT_FONTS = [
     { name: 'Saint', cat: 'Display', designer: 'Liza Dushnota' },
     { name: 'Uncut Sans', cat: 'Sans Serif', designer: 'Kasper Nordkvist' },
@@ -480,7 +482,7 @@ export async function loadUncutFonts(): Promise<FontItem[]> {
 /**
  * Load Free Faces Curated Type Directory (https://www.freefaces.gallery - 30 typefaces)
  */
-export async function loadFreeFacesFonts(): Promise<FontItem[]> {
+export function loadFreeFacesFonts(): FontItem[] {
   const FREE_FACES_FONTS = [
     { name: 'Big Shoulders Display', cat: 'Display', designer: 'Patric King' },
     { name: 'Syne Tactile', cat: 'Display', designer: 'Lucas Descroix' },
@@ -539,7 +541,7 @@ export async function loadFreeFacesFonts(): Promise<FontItem[]> {
 /**
  * Load Open Foundry Directory (https://open-foundry.com - 28 typefaces)
  */
-export async function loadOpenFoundryFonts(): Promise<FontItem[]> {
+export function loadOpenFoundryFonts(): FontItem[] {
   const OPEN_FOUNDRY_FONTS = [
     { name: 'Butler', cat: 'Serif', designer: 'Fabian De Smet' },
     { name: 'League Spartan', cat: 'Sans Serif', designer: 'The League of Moveable Type' },

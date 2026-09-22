@@ -1985,8 +1985,9 @@ export const FontDetailPage: React.FC<FontDetailPageProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      if (font.filePath || font.fileName) {
-                        navigator.clipboard?.writeText(font.filePath || font.fileName);
+                      const path = font.filePath || font.fileName || '';
+                      if (path) {
+                        navigator.clipboard?.writeText(path);
                         setCopiedPath(true);
                         setTimeout(() => setCopiedPath(false), 2000);
                       }

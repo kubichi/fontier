@@ -478,8 +478,9 @@ export const FontPropertiesPanel: React.FC<FontPropertiesPanelProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      if (font.filePath || font.fileName) {
-                        copyPath(font.filePath || font.fileName);
+                      const path = font.filePath || font.fileName || '';
+                      if (path) {
+                        copyPath(path);
                       }
                     }}
                     className="text-[10px] text-accent font-medium hover:underline flex items-center space-x-1"
