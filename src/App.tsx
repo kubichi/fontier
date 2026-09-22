@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef, useDeferredValue } from 'react';
+import React, { useState, useMemo, useEffect, useLayoutEffect, useRef, useDeferredValue } from 'react';
 import { TitleBar } from './components/TitleBar';
 import { Toolbar } from './components/Toolbar';
 import { Sidebar } from './components/Sidebar';
@@ -184,12 +184,23 @@ export default function App() {
 
   // Performance: True viewport windowing / virtualization so only ~20-30 font rows are mounted in the DOM
   const fontListContainerRef = useRef<HTMLDivElement>(null);
+  const savedScrollTopRef = useRef<number>(0);
   const [scrollTop, setScrollTop] = useState<number>(0);
   const [containerHeight, setContainerHeight] = useState<number>(800);
   const [containerWidth, setContainerWidth] = useState<number>(1200);
   const deferredPreviewText = useDeferredValue(previewText);
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const [systemFontProgress, setSystemFontProgress] = useState<{ loaded: number; total: number } | null>(null);
+
+  // When opening font detail/glyphs view, record current scroll position to restore later
+  const handleOpenDetail = (f: FontItem) => {
+    if (fontListContainerRef.current) {
+      savedScrollTopRef.current = fontListContainerRef.current.scrollTop;
+    } else {
+      savedScrollTopRef.current = scrollTop;
+    }
+    setDetailFont(f);
+  };
 
   // Sync accent color (custom user preference or native system accent) into CSS custom property
   useEffect(() => {
@@ -339,8 +350,8 @@ export default function App() {
 
     const updateDimensions = () => {
       if (!el) return;
-      const h = el.clientHeight || 800;
-      const w = el.clientWidth || 1200;
+      const h = el.clientHeight || (window.innerHeight - 150);
+      const w = el.clientWidth || (window.innerWidth - 300);
       // Guard against subpixel or scrollbar jitter triggering re-render cascades
       setContainerHeight((prev) => (Math.abs(prev - h) >= 4 ? h : prev));
       setContainerWidth((prev) => (Math.abs(prev - w) >= 8 ? w : prev));
@@ -360,8 +371,23 @@ export default function App() {
     };
   }, [detailFont]);
 
+  // Seamlessly restore scroll position and viewport metrics immediately when returning from detail page
+  useLayoutEffect(() => {
+    if (!detailFont && fontListContainerRef.current) {
+      const el = fontListContainerRef.current;
+      const targetScroll = savedScrollTopRef.current;
+      el.scrollTop = targetScroll;
+      const h = el.clientHeight || (window.innerHeight - 150);
+      const w = el.clientWidth || (window.innerWidth - 300);
+      setContainerHeight(h);
+      setContainerWidth(w);
+      setScrollTop(targetScroll);
+    }
+  }, [detailFont]);
+
   // Reset scroll position when navigation or filter changes
   useEffect(() => {
+    savedScrollTopRef.current = 0;
     setScrollTop(0);
     if (fontListContainerRef.current) {
       fontListContainerRef.current.scrollTop = 0;
@@ -371,6 +397,7 @@ export default function App() {
   // Auto-Navigate Back from Detail Page on Search
   useEffect(() => {
     if (searchQuery.trim() && detailFont) {
+      savedScrollTopRef.current = 0;
       setDetailFont(null);
     }
   }, [searchQuery]);
@@ -379,6 +406,7 @@ export default function App() {
   const scrollRafRef = useRef<number | null>(null);
   const handleFontListScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const newScroll = e.currentTarget.scrollTop;
+    savedScrollTopRef.current = newScroll;
     if (scrollRafRef.current !== null) return;
     scrollRafRef.current = requestAnimationFrame(() => {
       setScrollTop((prev) => (Math.abs(prev - newScroll) < 2 ? prev : newScroll));
@@ -1507,6 +1535,7 @@ export default function App() {
         <Sidebar
           currentFilter={currentFilter}
           onSelectFilter={(f) => {
+            savedScrollTopRef.current = 0;
             setCurrentFilter(f);
             setDetailFont(null); // return to library view when clicking navigation
           }}
@@ -1718,7 +1747,7 @@ export default function App() {
                             }}
                             onToggleActive={handleToggleActive}
                             onToggleFavorite={handleToggleFavorite}
-                            onOpenDetail={setDetailFont}
+                            onOpenDetail={handleOpenDetail}
                             theme={currentTheme}
                           />
                         ))}
@@ -1750,7 +1779,7 @@ export default function App() {
                             }}
                             onToggleActive={handleToggleActive}
                             onToggleFavorite={handleToggleFavorite}
-                            onOpenDetail={setDetailFont}
+                            onOpenDetail={handleOpenDetail}
                             theme={currentTheme}
                           />
                         ))}
@@ -1773,7 +1802,7 @@ export default function App() {
                   <FontPropertiesPanel
                     font={selectedFontForInspector}
                     onClose={() => setShowInspector(false)}
-                    onOpenDetail={(f: FontItem) => setDetailFont(f)}
+                    onOpenDetail={handleOpenDetail}
                     onToggleActive={handleToggleActive}
                     onToggleFavorite={handleToggleFavorite}
                     onUpdateFont={handleUpdateFont}
